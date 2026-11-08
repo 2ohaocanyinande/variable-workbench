@@ -1,0 +1,15 @@
+Mode: built-in image_gen
+
++Use case: ads-marketing
+Asset type: polished 16:9 landscape hackathon project cover, high-resolution, ideally 2560x1440.
+Create a complete finished Chinese cover for the local desktop application “变量工作台”, an AI-assisted tool for understanding unfamiliar ESP32 / STM32 embedded projects through source evidence.
+Text (verbatim, large and perfectly readable):
+“读懂工程，”
+“轻而易举啊！”
+These two lines form the exact requested headline “读懂工程，轻而易举啊！”. Do not omit 啊 or change punctuation.
+Small brand text: “变量工作台”
+One concise subtitle: “从陌生代码，到清晰的设备与控制关系”
+Three small feature labels: “源码可溯源” “本地分析” “自选 AI 接口”
+Composition: elegant editorial technology cover, a strong oversized headline on the left with ample breathing room, a coherent product visualization on the right. At right, a few overlapping source-code sheets and file-tree fragments smoothly organize into a clean graph of connected devices and control loops, then a compact desktop control dashboard. Show restrained, legible labels “电机”, “IMU”, “速度环”, “转向环” and Kp Ki Kd. Thin mint-colored evidence lines connect a highlighted source line and its file:line marker to the corresponding device/control-loop cards: make the source traceability distinctive. Include one tiny source-display preview and one graceful telemetry curve within the UI, as supporting details, not the main subject. Illustrate an analytical workflow and dashboard preview; do not claim automatic live hardware control, automatic tuning or universal device support.
+Style: sophisticated product-launch poster, modern Chinese sans-serif typography, flat/crisp interface illustration with subtle depth, controlled layering, precise spacing and light. Solid midnight navy and blue-grey backdrop, soft white text, mint/teal accents consistent with the application's dark desktop interface. Excellent contrast, readable at presentation scale, premium rather than busy. The headline is the hero.
+Avoid: robots, humanoids, brains, stock AI icons, giant chips as the main subject, neon rainbow cyberpunk, excessive floating glass panels, illegible microtext, meaningless decoration, fabricated statistics, extra slogans, watermarks, competitor logos. Render all Chinese headline characters correctly.
