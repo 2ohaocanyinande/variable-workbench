@@ -1,0 +1,7 @@
+/state/
+/.pack-build/
+/.pack-env/
+/.venv/
+__pycache__/
+*.log
+/VariableWorkbench.exe
