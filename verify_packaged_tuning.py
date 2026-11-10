@@ -16,7 +16,7 @@ r=post('tuning-diagnose',{'id':ids['oscillating'],'config':config})
 c=post('tuning-compare',{'before':ids['oscillating'],'after':ids['damped'],'config':config})
 assert r['proposal']['after']==14.25 and c['rms_reduction_percent']>99
 for name in ['tuning.js','tuning.css']:assert opener.open(url+'/'+name).read()==Path('dist',name).read_bytes()
-assert b'tuning-demo' in opener.open(url+'/').read()
+assert b'tuning-demo' not in opener.open(url+'/').read()
 # This is the user's previously opened, authorized read-only test project.
 session=Path('state/project-session.json')
 if session.is_file():Path('state/project-session-before-tuning-check.json').write_bytes(session.read_bytes())

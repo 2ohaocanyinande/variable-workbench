@@ -70,7 +70,7 @@ class DisplayDriverTests(unittest.TestCase):
         self.make(LCD_DRIVER,LCD_APP+'\nvoid keys(void){if(key1.down){lcd_page=!lcd_page;key1.down=0;}}')
         b=self.group['buttons'][0];self.assertEqual(b['input'],'key1.down');self.assertEqual(b['variable'],'lcd_page');self.assertEqual(b['operation'],'toggle');self.assertEqual(b['path'],'main.c')
     def test_unknown_conditions_are_skipped(self):
-        self.make(LCD_DRIVER,'void draw(void){if(flag>2){LCD_DisplayStringLine(Line0,"UNSAFE");}else{LCD_DisplayStringLine(Line0,"ELSE");}}')
+        self.make(LCD_DRIVER,'void draw(void){if(read_flag()>2){LCD_DisplayStringLine(Line0,"UNSAFE");}else{LCD_DisplayStringLine(Line0,"ELSE");}}')
         r=self.render({'flag':3});self.assertFalse(any(row.strip() for row in r['rows']));self.assertTrue(r['warnings'])
         self.make(LCD_DRIVER,'void draw(void){if(flag) LCD_DisplayStringLine(Line0,"IF");else LCD_DisplayStringLine(Line0,"ELSE");}')
         r=self.render({'flag':1});self.assertFalse(any(row.strip() for row in r['rows']));self.assertTrue(r['warnings'])
@@ -118,6 +118,23 @@ void draw(void){
         self.assertTrue(self.render(dict(page=0,highlight=0))['rows'][0].startswith('INNER'))
         self.assertTrue(self.render(dict(page=0,highlight=1))['rows'][0].startswith('ELSE'))
         r=self.render(dict(page=1));self.assertFalse(r['rows'][0].strip());self.assertFalse(r['warnings'])
+    def test_timed_refresh_and_compound_macro_guard(self):
+        self.make(LCD_DRIVER+'\n#define DATA_PAGE 2\n','''uint8_t page=DATA_PAGE,mode;
+void draw(void){
+ if(HAL_GetTick()-last_refresh>=100){
+  if(page==DATA_PAGE&&(mode==0||mode==1)) LCD_DisplayStringLine(Line0,"DATA");
+  else LCD_DisplayStringLine(Line0,"OTHER");
+ }
+}
+void keys(void){if(key()) LCD_Clear(Black);}
+''')
+        self.assertEqual([g['name'] for g in self.report['groups']],['draw'])
+        values={k:v['value'] for k,v in self.group['defaults'].items()}
+        self.assertEqual(values['HAL_GetTick()-last_refresh'],100)
+        self.assertTrue(self.render(values)['rows'][0].startswith('DATA'))
+        self.assertTrue(self.render(dict(values,mode=3))['rows'][0].startswith('OTHER'))
+        values['HAL_GetTick()-last_refresh']=99
+        self.assertFalse(self.render(values)['rows'][0].strip())
     def test_member_paths_are_one_input_and_read_only_numeric_lookup(self):
         self.make(LCD_DRIVER,'void draw(void){sprintf(buf,"Date:%02d-%02d",rtc_date.Year,rtc_date.Month);LCD_DisplayStringLine(Line1,buf);}')
         self.assertEqual(self.group['variables'],['rtc_date.Month','rtc_date.Year'])

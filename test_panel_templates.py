@@ -74,18 +74,20 @@ class TemplateTests(unittest.TestCase):
         for t in [float('nan'),float('inf'),-1,True,86401]:
             with self.assertRaises(ValueError):p.sample(self.build(),t)
 
-    def test_http_endpoints_never_write_serial(self):
+    def test_retired_template_endpoints_are_unavailable(self):
         port=Mock()
         with patch.object(w,'SCAN',self.scan),patch.object(w,'STATE',self.base),patch.object(w,'PORT',port):
             server=w.ThreadingHTTPServer(('127.0.0.1',0),w.Handler);thread=threading.Thread(target=server.serve_forever,daemon=True);thread.start()
             try:
                 opener=urllib.request.build_opener(urllib.request.ProxyHandler({}));url='http://127.0.0.1:'+str(server.server_port)
-                def post(path,body):return json.load(opener.open(urllib.request.Request(url+'/api/'+path,data=json.dumps(body).encode(),headers={'Content-Type':'application/json'})))
-                listed=json.load(opener.open(url+'/api/template-panel'));self.assertEqual(listed['root'],str(self.root))
-                panel=post('template-panel',{'project_hash':self.scan['project_hash'],'selections':[{'id':'interface:a','template':'servo','name':'舵机'}]})
-                result=post('template-panel-set',{'panel_id':panel['id'],'project_hash':panel['project_hash'],'field':panel['items'][0]['fields'][0]['id'],'value':35})
-                sample=json.load(opener.open(url+'/api/template-panel-data?panel_id='+panel['id']+'&project_hash='+panel['project_hash']+'&t=1'))
-                self.assertEqual(list(sample['values'].values()),[35]);self.assertFalse(result['hardware_written']);port.write.assert_not_called()
+                for path, data in (('template-panel',None),('template-panel',b'{}'),
+                                   ('template-panel-set',b'{}'),('template-panel-data?t=1',None)):
+                    request=urllib.request.Request(url+'/api/'+path,data=data)
+                    with self.assertRaises(urllib.error.HTTPError) as error:
+                        opener.open(request,timeout=3)
+                    with error.exception as response:
+                        self.assertEqual(response.code,404)
+                port.write.assert_not_called()
             finally:server.shutdown();server.server_close();thread.join()
 
 

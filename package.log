@@ -1,9 +1,9 @@
-161 INFO: PyInstaller: 6.22.3, contrib hooks: 2026.9
-161 INFO: Python: 3.13.6
-208 INFO: Platform: Windows-11-10.0.26200-SP0
-209 INFO: Python environment: D:\codex\variable-workbench\.pack-env
-209 INFO: wrote D:\codex\variable-workbench\.pack-build\VariableWorkbench.spec
-217 INFO: Module search paths (PYTHONPATH):
+100 INFO: PyInstaller: 6.22.3, contrib hooks: 2026.9
+100 INFO: Python: 3.13.6
+116 INFO: Platform: Windows-11-10.0.26200-SP0
+116 INFO: Python environment: D:\codex\variable-workbench\.pack-env
+117 INFO: wrote .pack-build\VariableWorkbench.spec
+124 INFO: Module search paths (PYTHONPATH):
 ['D:\\codex\\variable-workbench',
  'C:\\Users\\wohaocanyinande\\Desktop\\python3.13\\python313.zip',
  'C:\\Users\\wohaocanyinande\\Desktop\\python3.13\\DLLs',
@@ -13,57 +13,54 @@
  'D:\\codex\\variable-workbench\\.pack-env\\Lib\\site-packages',
  'C:\\Users\\wohaocanyinande\\Desktop\\python3.13\\Lib\\site-packages',
  'D:\\codex\\variable-workbench']
-712 INFO: Appending 'datas' from .spec
-713 INFO: checking Analysis
-716 INFO: Building because D:\codex\variable-workbench\dist\source-screen.js changed
-716 INFO: Looking for Python shared library...
-716 INFO: Using Python shared library: C:\Users\wohaocanyinande\Desktop\python3.13\python313.dll
-716 INFO: Running Analysis Analysis-00.toc
-716 INFO: Target bytecode optimization level: 0
-716 INFO: Initializing module dependency graph...
-717 INFO: Initializing module graph hook caches...
-729 INFO: Analyzing modules for base_library.zip ...
-1751 INFO: Processing standard module hook 'hook-encodings.py' from 'D:\\codex\\variable-workbench\\.pack-env\\Lib\\site-packages\\PyInstaller\\hooks'
-2576 INFO: Processing standard module hook 'hook-math.py' from 'D:\\codex\\variable-workbench\\.pack-env\\Lib\\site-packages\\PyInstaller\\hooks'
-3499 INFO: Processing standard module hook 'hook-pickle.py' from 'D:\\codex\\variable-workbench\\.pack-env\\Lib\\site-packages\\PyInstaller\\hooks'
-4103 INFO: Processing standard module hook 'hook-heapq.py' from 'D:\\codex\\variable-workbench\\.pack-env\\Lib\\site-packages\\PyInstaller\\hooks'
-4417 INFO: Caching module dependency graph...
-4448 INFO: Analyzing D:\codex\variable-workbench\desktop_app.py
-4465 INFO: Processing standard module hook 'hook-_ctypes.py' from 'D:\\codex\\variable-workbench\\.pack-env\\Lib\\site-packages\\PyInstaller\\hooks'
-4938 INFO: Processing standard module hook 'hook-platform.py' from 'D:\\codex\\variable-workbench\\.pack-env\\Lib\\site-packages\\PyInstaller\\hooks'
-5156 INFO: Processing standard module hook 'hook-xml.py' from 'D:\\codex\\variable-workbench\\.pack-env\\Lib\\site-packages\\PyInstaller\\hooks'
-5173 INFO: Processing standard module hook 'hook-xml.etree.cElementTree.py' from 'D:\\codex\\variable-workbench\\.pack-env\\Lib\\site-packages\\PyInstaller\\hooks'
-5204 INFO: Processing standard module hook 'hook-difflib.py' from 'D:\\codex\\variable-workbench\\.pack-env\\Lib\\site-packages\\PyInstaller\\hooks'
-5207 INFO: Processing module hooks (post-graph stage)...
-5243 INFO: Performing binary vs. data reclassification (16 entries)
-5245 INFO: Looking for ctypes DLLs
-5260 WARNING: Ignoring /System/Library/Frameworks/IOKit.framework/IOKit imported from C:\Users\wohaocanyinande\Desktop\python3.13\Lib\site-packages\serial\tools\list_ports_osx.py - only basenames are supported with ctypes imports!
-5260 WARNING: Ignoring /System/Library/Frameworks/CoreFoundation.framework/CoreFoundation imported from C:\Users\wohaocanyinande\Desktop\python3.13\Lib\site-packages\serial\tools\list_ports_osx.py - only basenames are supported with ctypes imports!
-5264 INFO: Analyzing run-time hooks ...
-5264 INFO: Including run-time hook 'pyi_rth_inspect.py' from 'D:\\codex\\variable-workbench\\.pack-env\\Lib\\site-packages\\PyInstaller\\hooks\\rthooks'
-5269 INFO: Creating base_library.zip...
-5285 INFO: Looking for dynamic libraries
-5387 INFO: Extra DLL search directories (AddDllDirectory): []
-5387 INFO: Extra DLL search directories (PATH): []
-5670 INFO: Warnings written to D:\codex\variable-workbench\.pack-build\VariableWorkbench\warn-VariableWorkbench.txt
-5685 INFO: Graph cross-reference written to D:\codex\variable-workbench\.pack-build\VariableWorkbench\xref-VariableWorkbench.html
-5701 INFO: checking PYZ
-5702 INFO: Building because toc changed
-5702 INFO: Building PYZ (ZlibArchive) D:\codex\variable-workbench\.pack-build\VariableWorkbench\PYZ-00.pyz
-5880 INFO: Building PYZ (ZlibArchive) D:\codex\variable-workbench\.pack-build\VariableWorkbench\PYZ-00.pyz completed successfully.
-5886 INFO: checking PKG
-5887 INFO: Building because toc changed
-5887 INFO: Building PKG (CArchive) VariableWorkbench.pkg
-7409 INFO: Building PKG (CArchive) VariableWorkbench.pkg completed successfully.
-7411 INFO: Bootloader D:\codex\variable-workbench\.pack-env\Lib\site-packages\PyInstaller\bootloader\Windows-64bit-intel\runw.exe
-7411 INFO: checking EXE
-7412 INFO: Building because toc changed
-7412 INFO: Building EXE from EXE-00.toc
-7413 INFO: Copying bootloader EXE to D:\codex\variable-workbench\VariableWorkbench.exe
-7424 INFO: Copying icon to EXE
-7432 INFO: Copying 0 resources to EXE
-7432 INFO: Embedding manifest in EXE
-7438 INFO: Appending PKG archive to EXE
-7445 INFO: Fixing EXE headers
-7500 INFO: Building EXE from EXE-00.toc completed successfully.
-7503 INFO: Build complete! The results are available in: D:\codex\variable-workbench
+445 INFO: Appending 'datas' from .spec
+445 INFO: checking Analysis
+448 INFO: Building because _input_datas changed
+449 INFO: Looking for Python shared library...
+449 INFO: Using Python shared library: C:\Users\wohaocanyinande\Desktop\python3.13\python313.dll
+449 INFO: Running Analysis Analysis-00.toc
+449 INFO: Target bytecode optimization level: 0
+449 INFO: Initializing module dependency graph...
+450 INFO: Initializing module graph hook caches...
+459 INFO: Analyzing modules for base_library.zip ...
+1314 INFO: Processing standard module hook 'hook-encodings.py' from 'D:\\codex\\variable-workbench\\.pack-env\\Lib\\site-packages\\PyInstaller\\hooks'
+1779 INFO: Processing standard module hook 'hook-math.py' from 'D:\\codex\\variable-workbench\\.pack-env\\Lib\\site-packages\\PyInstaller\\hooks'
+2686 INFO: Processing standard module hook 'hook-pickle.py' from 'D:\\codex\\variable-workbench\\.pack-env\\Lib\\site-packages\\PyInstaller\\hooks'
+3341 INFO: Processing standard module hook 'hook-heapq.py' from 'D:\\codex\\variable-workbench\\.pack-env\\Lib\\site-packages\\PyInstaller\\hooks'
+3756 INFO: Caching module dependency graph...
+3795 INFO: Analyzing D:\codex\variable-workbench\desktop_app.py
+3818 INFO: Processing standard module hook 'hook-_ctypes.py' from 'D:\\codex\\variable-workbench\\.pack-env\\Lib\\site-packages\\PyInstaller\\hooks'
+4361 INFO: Processing standard module hook 'hook-platform.py' from 'D:\\codex\\variable-workbench\\.pack-env\\Lib\\site-packages\\PyInstaller\\hooks'
+4650 INFO: Processing standard module hook 'hook-xml.py' from 'D:\\codex\\variable-workbench\\.pack-env\\Lib\\site-packages\\PyInstaller\\hooks'
+4667 INFO: Processing standard module hook 'hook-xml.etree.cElementTree.py' from 'D:\\codex\\variable-workbench\\.pack-env\\Lib\\site-packages\\PyInstaller\\hooks'
+4700 INFO: Processing standard module hook 'hook-difflib.py' from 'D:\\codex\\variable-workbench\\.pack-env\\Lib\\site-packages\\PyInstaller\\hooks'
+4704 INFO: Processing module hooks (post-graph stage)...
+4740 INFO: Performing binary vs. data reclassification (14 entries)
+4743 INFO: Looking for ctypes DLLs
+4764 WARNING: Ignoring /System/Library/Frameworks/IOKit.framework/IOKit imported from C:\Users\wohaocanyinande\Desktop\python3.13\Lib\site-packages\serial\tools\list_ports_osx.py - only basenames are supported with ctypes imports!
+4764 WARNING: Ignoring /System/Library/Frameworks/CoreFoundation.framework/CoreFoundation imported from C:\Users\wohaocanyinande\Desktop\python3.13\Lib\site-packages\serial\tools\list_ports_osx.py - only basenames are supported with ctypes imports!
+4770 INFO: Analyzing run-time hooks ...
+4771 INFO: Including run-time hook 'pyi_rth_inspect.py' from 'D:\\codex\\variable-workbench\\.pack-env\\Lib\\site-packages\\PyInstaller\\hooks\\rthooks'
+4777 INFO: Creating base_library.zip...
+4806 INFO: Looking for dynamic libraries
+4916 INFO: Extra DLL search directories (AddDllDirectory): []
+4916 INFO: Extra DLL search directories (PATH): []
+5264 INFO: Warnings written to D:\codex\variable-workbench\.pack-build\VariableWorkbench\warn-VariableWorkbench.txt
+5280 INFO: Graph cross-reference written to D:\codex\variable-workbench\.pack-build\VariableWorkbench\xref-VariableWorkbench.html
+5296 INFO: checking PYZ
+5303 INFO: checking PKG
+5304 INFO: Building because toc changed
+5304 INFO: Building PKG (CArchive) VariableWorkbench.pkg
+6948 INFO: Building PKG (CArchive) VariableWorkbench.pkg completed successfully.
+6950 INFO: Bootloader D:\codex\variable-workbench\.pack-env\Lib\site-packages\PyInstaller\bootloader\Windows-64bit-intel\runw.exe
+6950 INFO: checking EXE
+6951 INFO: Rebuilding EXE-00.toc because VariableWorkbench.exe missing
+6951 INFO: Building EXE from EXE-00.toc
+6952 INFO: Copying bootloader EXE to D:\codex\variable-workbench\state\graphics-staging\VariableWorkbench.exe
+6962 INFO: Copying icon to EXE
+6969 INFO: Copying 0 resources to EXE
+6969 INFO: Embedding manifest in EXE
+6977 INFO: Appending PKG archive to EXE
+6985 INFO: Fixing EXE headers
+7072 INFO: Building EXE from EXE-00.toc completed successfully.
+7074 INFO: Build complete! The results are available in: D:\codex\variable-workbench\state\graphics-staging

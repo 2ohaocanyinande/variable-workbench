@@ -34,3 +34,5 @@ button:disabled{opacity:1;color:#69788e;background:#e6ebf2;border-color:#c3cedd;
 input[type=checkbox]{accent-color:#3155bd}td input[type=checkbox]{width:17px;height:17px}tr:has(input[type=checkbox]:checked){background:#e7eeff;box-shadow:inset 3px 0 #3759cc}tr:has(input[type=checkbox]:checked) .field-name{color:#24428f}
 th{color:#536782;background:#f0f4fa}td .sub,#device-count,#device-selection{color:#596b84;font-size:12px}.field-name{color:#354e73}#device-list input:not([type=checkbox]):focus{border-color:#264fc5}.validation-warning{color:#79551c;border-color:#d5b270;background:#fff7e7}#notice{color:#3c558e;border-left-color:#4b67b8}#serial label,#serial-log{color:#4d6282}#pid-section>p:last-child{color:#52627a;background:#f0f3f8}
 @media(max-width:760px){.pid-type{font-size:10px}.pid-card-name{font-size:14px}}
+
+nav a[hidden]{display:none}

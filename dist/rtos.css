@@ -1,0 +1,170 @@
+#rtos-section {
+  --rtos-mint: #81e0c5;
+  --rtos-blue: #9ebcf5;
+  --rtos-gold: #f2ce8c;
+  --rtos-panel: #162733;
+  --rtos-border: #395260;
+  --rtos-muted: #abc0ce;
+}
+.rtos-hero {
+  position: relative;
+  isolation: isolate;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 154px;
+  gap: 24px;
+  overflow: hidden;
+  padding: 22px 26px;
+  border: 1px solid #396367;
+  border-radius: 13px;
+  background: radial-gradient(circle at 80% 40%, #23454b, transparent 64%), #172e38;
+}
+.rtos-hero::before {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  inset: 0;
+  background-image: radial-gradient(#82c6bd38 1px, transparent 1px);
+  background-size: 17px 17px;
+  mask-image: linear-gradient(to right, transparent 42%, #000);
+}
+.rtos-hero-copy { min-width: 0; }
+.rtos-eyebrow { color: var(--rtos-mint); font-size: 11px; letter-spacing: .15em; }
+.rtos-hero h2 { font-size: clamp(21px, 2.25vw, 30px); margin: 5px 0 8px; }
+.rtos-hero p { margin: 5px 0; }
+#rtos-summary { color: #d4f5ed; font-weight: 600; }
+.rtos-hero-art { flex: 0 1 330px; width: 34%; height: auto; }
+.rtos-stat-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(235px, 100%), 1fr));
+  gap: 12px;
+}
+.rtos-stat-grid { margin: 14px 0 15px; }
+.rtos-stat {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--rtos-border);
+  border-radius: 10px;
+  background: var(--rtos-panel);
+}
+.rtos-icon {
+  display: grid;
+  place-items: center;
+  flex: 0 0 36px;
+  width: 36px;
+  height: 36px;
+  border-radius: 9px;
+  background: #21443f;
+  color: var(--rtos-mint);
+}
+.rtos-icon svg { width: 21px; height: 21px; }
+.rtos-stat:nth-child(2) .rtos-icon { background: #263b55; color: var(--rtos-blue); }
+.rtos-stat:nth-child(3) .rtos-icon { background: #453c2c; color: var(--rtos-gold); }
+.rtos-stat strong { display: block; font-size: 24px; line-height: 1.15; font-variant-numeric: tabular-nums; }
+.rtos-stat small, .rtos-muted { color: var(--rtos-muted); }
+.rtos-block { margin-top: 23px; }
+.rtos-block h3 { margin: 0 0 9px; font-size: 16px; }
+.rtos-block > .hint { margin: 0 0 10px; }
+.rtos-task-list {
+  overflow: hidden;
+  border: 1px solid var(--rtos-border);
+  border-radius: 11px;
+  background: var(--rtos-panel);
+}
+.rtos-task-filter { width: min(320px, 100%); margin: 0 0 10px; }
+.rtos-task, .rtos-task-columns {
+  display: grid;
+  grid-template-columns: minmax(0, 1.45fr) minmax(0, .7fr) minmax(0, 1.15fr) minmax(94px, .95fr);
+  align-items: center;
+  gap: 14px;
+  padding: 12px 16px;
+}
+.rtos-task-columns {
+  background: #203643;
+  color: var(--rtos-muted);
+  font-size: 12px;
+}
+.rtos-task {
+  min-width: 0;
+  border-top: 1px solid var(--rtos-border);
+}
+.rtos-task:hover, .rtos-task:focus-within { background: #1d3440; }
+.rtos-task[hidden], .rtos-task-list .rtos-empty[hidden] { display: none; }
+.rtos-task-list .rtos-empty { margin: 12px; }
+.rtos-task .rtos-label { display: none; }
+.rtos-task-head { display: flex; align-items: flex-start; gap: 9px; }
+.rtos-task-head > div { min-width: 0; }
+.rtos-task-head strong { display: block; font-size: 16px; overflow-wrap: anywhere; }
+.rtos-task-head code, .rtos-stack code { color: #b8cedd; overflow-wrap: anywhere; }
+.rtos-label { display: block; font-size: 11px; color: var(--rtos-muted); }
+.rtos-priority {
+  display: inline-block;
+  max-width: 100%;
+  margin-top: 3px;
+  padding: 2px 7px;
+  border: 1px solid #4e7774;
+  border-radius: 5px;
+  background: #244641;
+  color: #c0efdf;
+  overflow-wrap: anywhere;
+}
+.rtos-priority[data-tone="high"] { background: #473e2c; border-color: #806f49; color: var(--rtos-gold); }
+.rtos-priority[data-tone="low"] { background: #243957; border-color: #50739b; color: var(--rtos-blue); }
+.rtos-stack-value { display: flex; align-items: baseline; justify-content: space-between; flex-wrap: wrap; gap: 1px 8px; }
+.rtos-stack-value strong { font-size: 16px; line-height: 1.35; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.rtos-stack-value code { font-size: 11px; }
+.rtos-meter { height: 6px; overflow: hidden; margin: 7px 0 4px; border-radius: 3px; background: #354b57; }
+.rtos-meter > span { display: block; height: 100%; background: linear-gradient(90deg, #56b59e, #94e5ce); border-radius: inherit; }
+.rtos-sources { font-size: 12px; padding: 7px 0 0; }
+.rtos-task > .rtos-sources { padding-top: 0; }
+.rtos-sources summary { cursor: pointer; color: #c0d7e1; }
+.rtos-sources summary:hover { color: var(--rtos-mint); }
+.rtos-sources .source-link { display: block; width: fit-content; max-width: 100%; text-align: left; overflow-wrap: anywhere; }
+.rtos-flow {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(155px, 1fr);
+  gap: 24px;
+  margin: 6px 0 14px;
+  padding: 0 0 3px;
+  overflow-x: auto;
+  list-style: none;
+}
+.rtos-step {
+  position: relative;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--rtos-border);
+  border-radius: 9px;
+  background: var(--rtos-panel);
+  overflow-wrap: anywhere;
+}
+.rtos-step:not(:last-child)::after {
+  content: "→";
+  position: absolute;
+  top: 42%;
+  left: calc(100% + 5px);
+  color: var(--rtos-mint);
+}
+.rtos-step strong { display: block; margin: 4px 0 2px; }
+.rtos-step-index { color: var(--rtos-mint); font: 600 12px Consolas, monospace; }
+.rtos-empty { color: var(--rtos-muted); padding: 13px; border: 1px dashed var(--rtos-border); border-radius: 8px; }
+@media (max-width: 760px) {
+  .rtos-hero { padding: 17px; }
+  .rtos-hero-art { width: 26%; }
+  .rtos-stat-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 7px; }
+  .rtos-stat { align-items: flex-start; flex-direction: column; padding: 9px; gap: 5px; }
+  .rtos-stat .rtos-icon { flex-basis: 28px; width: 28px; height: 28px; }
+  .rtos-stat strong { font-size: 19px; }
+  .rtos-task-columns { display: none; }
+  .rtos-task { grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 8px 14px; padding: 12px; }
+  .rtos-task .rtos-label { display: block; }
+  .rtos-task .rtos-stack { grid-column: 1; }
+  .rtos-task > .rtos-sources { align-self: end; }
+  .rtos-flow { grid-auto-flow: row; grid-template-columns: minmax(0, 1fr); gap: 18px; }
+  .rtos-step:not(:last-child)::after { content: "↓"; top: 100%; left: 19px; }
+}
+@media (max-width: 450px) { .rtos-hero-art { display: none; } }

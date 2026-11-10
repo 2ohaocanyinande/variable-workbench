@@ -9,6 +9,21 @@ from common_modules import signatures, hints, enrich
 from code_evidence import quote_exists, tokens
 
 
+# Bind register access to a declared peripheral type before interpreting it.
+# Many unrelated STM32 peripherals have fields named CR1 or DR.
+REGISTER_INTERFACES = {
+    'TIM': ('PWM', r'TIM_?\d+', r'(?:TIM\d+_CH|TIM_CHANNEL_)[1-4]', r'CCR[1-4]\s*=(?!=)'),
+    'GPIO': ('GPIO', r'GPIO_?[A-K]', r'(?:Pin_|GPIO_Pin_|GPIO_PIN_)(?:[0-9]|1[0-5])', r'(?:CR[HL]|MODER|IDR|ODR|BSRR|BRR)\b'),
+    'USART': ('UART', r'(?:USART|UART)_?\d+', None, r'(?:BRR|CR1|DR|TDR|RDR)\b'),
+    'ADC': ('ADC', r'ADC_?\d+', r'(?:ADC_Channel_|ADC_CHANNEL_)\d+', r'(?:SQR[1-5]|CHSELR|DR)\b'),
+}
+REGISTER_ACCESS = re.compile(r'\b(\w+)\s*(?:\[\s*(\w+)\s*\])?\s*->\s*(\w+)')
+SOFTWARE_INTERFACES = {
+    'I2C_Init': ('I2C', '软件 I2C', r'\b(\w+)\s*\([^;]*SCL[^;]*;[\s\S]*\b\1\s*\([^;]*SDA'),
+    'OLED_Init': ('DISPLAY', 'OLED', r'\bOLED_(?:I2C_Init|WriteCommand)\s*\([\s\S]*\bOLED_Clear\s*\('),
+}
+
+
 def split_arguments(text):
     result, start, depth = [], 0, 0
     for i, char in enumerate(text):
@@ -20,22 +35,128 @@ def split_arguments(text):
     return result
 
 
+def register_binding(body, parameters, tables):
+    typed_pointers = {}
+    parameter_indices = {}
+    for index, parameter in enumerate(split_arguments(parameters)):
+        name = re.search(r'\b(\w+)$', parameter)
+        if not name: continue
+        parameter_indices[name[1]] = index
+        pointer = re.search(r'\b(\w+)_TypeDef\s*\*', parameter)
+        if pointer: typed_pointers[name[1]] = pointer[1]
+    operations = {}
+    for access in REGISTER_ACCESS.finditer(body):
+        base, selector, register = access.groups()
+        peripheral = tables.get(base) if selector else typed_pointers.get(base)
+        argument = parameter_indices.get(selector or base)
+        if peripheral in REGISTER_INTERFACES and argument is not None:
+            family, handle_pattern, channel_pattern, operation = REGISTER_INTERFACES[peripheral]
+            if re.match(operation, body[access.start(3):]):
+                operations.setdefault((family, argument, handle_pattern, channel_pattern), []).append(access)
+        elif base == 'EXTI' and not selector and register == 'IMR':
+            statement = body[access.end():].split(';', 1)[0]
+            pin = re.match(r'\s*\|=\s*1[uU]?\s*<<\s*\(?\s*(\w+)\b', statement)
+            if pin and pin[1] in parameter_indices:
+                operations.setdefault(('EXTI', parameter_indices[pin[1]], r'EXTI_P[A-K](?:[0-9]|1[0-5])', None), []).append(access)
+    if len(operations) != 1: return None
+    (family, argument, handle_pattern, channel_pattern), accesses = next(iter(operations.items()))
+    channel_positions = {}
+    if family == 'PWM':
+        for access in accesses:
+            channel_positions.setdefault(access[3][-1], access.start())
+    fixed_channel = 'CH'+next(iter(channel_positions)) if len(channel_positions) == 1 else ''
+    referenced = {index for name, index in parameter_indices.items()
+                  if index != argument and re.search(r'\b'+re.escape(name)+r'\b', body)}
+    return (family, argument, handle_pattern, channel_pattern, fixed_channel, referenced,
+            accesses[0].start(), channel_positions)
+
+
 def inventory(root, texts, hashes):
     endpoints, modules = {}, {}
+    wrapper_drivers = {}
+    wrapper_implementations = {}
+    definitions_pattern = re.compile(r'(?m)^[ \t]*(?:\w+[ \t*]+)+(\w+)\s*\(([^;{}]*)\)\s*\{')
+    sources = {p: masked(t) for p, t in texts.items() if p.suffix in {'.c', '.cpp'}}
+    table_types = {}
+    for code in sources.values():
+        for kind, table in re.findall(r'\b(\w+)_TypeDef\s*\*\s*(\w+)\s*\[\s*\d*\s*\]', code):
+            table_types.setdefault(table, set()).add(kind)
+    tables = {table: next(iter(types)) for table, types in table_types.items() if len(types) == 1}
+    definitions = {}
+    wrapper_definition_sites = set()
+    for source, code in sources.items():
+        for match in definitions_pattern.finditer(code):
+            name = match[1]
+            definitions.setdefault(name, []).append(source)
+            start = match.end()-1
+            end = balanced(code, start, '{', '}')
+            if end is None: continue
+            body = code[start+1:end]
+            binding = register_binding(body, match[2], tables)
+            if not binding and name in SOFTWARE_INTERFACES:
+                family, label, pattern = SOFTWARE_INTERFACES[name]
+                proof = re.search(pattern, body)
+                if proof: binding = family, None, None, None, label, set(), proof.start(), {}
+            if binding:
+                wrapper_definition_sites.add((source, match.start(1)))
+                offset, channel_offsets = binding[-2:]
+                line = code.count('\n', 0, start+1+offset)+1
+                channel_lines = {channel: code.count('\n', 0, start+1+pos)+1
+                                 for channel, pos in channel_offsets.items()}
+                wrapper_implementations[name] = source, binding[:-2], line, channel_lines
+    wrappers = {name: item for name, item in wrapper_implementations.items()
+                if definitions[name] == [item[0]]}
+    driver_sources = {item[0] for item in wrappers.values()}
+    apis = r'HAL_TIM_PWM_Start|__HAL_TIM_SET_COMPARE|HAL_TIM_Encoder_(?:Init|Start(?:_IT|_DMA)?)|__HAL_TIM_(?:GET|SET)_COUNTER|TIM_GetCounter|TIM_SetCompare[1-4]|HAL_UART_(?:Transmit|Receive)(?:_DMA|_IT)?|HAL_ADC_(?:GetValue|Start_DMA)|HAL_GPIO_(?:Read|Write)Pin|GPIO_(?:SetBits|ResetBits|WriteBit)|ADC_GetConversionValue|USART_(?:SendData|ReceiveData)|HAL_I2C_(?:Master_(?:Transmit|Receive)|Mem_Read)(?:_DMA|_IT)?|HAL_SPI_(?:Transmit|Receive|TransmitReceive)(?:_DMA|_IT)?'
+    if wrappers: apis += '|' + '|'.join(wrappers)
+    calls = re.compile(r'\b('+apis+r')\s*\(')
     for path, text in texts.items():
-        if path.suffix not in {'.c', '.cpp'}: continue
-        code = masked(text)
+        if path not in sources: continue
+        code = sources[path]
         relative = path.relative_to(root).as_posix()
-        for match in re.finditer(r'\b(HAL_TIM_PWM_Start|__HAL_TIM_SET_COMPARE|HAL_TIM_Encoder_(?:Init|Start(?:_IT|_DMA)?)|__HAL_TIM_(?:GET|SET)_COUNTER|TIM_GetCounter|TIM_SetCompare[1-4]|HAL_UART_(?:Transmit|Receive)(?:_DMA|_IT)?|HAL_ADC_(?:GetValue|Start_DMA)|HAL_GPIO_WritePin|GPIO_(?:SetBits|ResetBits|WriteBit)|ADC_GetConversionValue|USART_(?:SendData|ReceiveData)|HAL_I2C_(?:Master_(?:Transmit|Receive)|Mem_Read)(?:_DMA|_IT)?|HAL_SPI_(?:Transmit|Receive|TransmitReceive)(?:_DMA|_IT)?)\s*\(', code):
+        pin_switches = []
+        if path in driver_sources:
+            for selector in re.finditer(r'\bswitch\s*\(\s*\w+\s*\)\s*\{', code):
+                end = balanced(code, selector.end()-1, '{', '}')
+                if end is not None: pin_switches.append((selector.end(), end))
+        for match in calls.finditer(code):
             end = balanced(code, match.end()-1)
             if end is None: continue
             args = split_arguments(code[match.end():end])
             if not args: continue
             api = match[1]
             handle = re.sub(r'\s+', '', args[0]).lstrip('&')
-            if not re.fullmatch(r'[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)?', handle): continue
             channel = ''
-            if api.startswith('HAL_TIM_Encoder_'):
+            status = '接口线索 · 设备类型待识别'
+            if api in wrappers:
+                if (path, match.start(1)) in wrapper_definition_sites: continue
+                driver, binding, register_line, channel_lines = wrappers[api]
+                family, argument, handle_pattern, channel_pattern, fixed_channel, referenced = binding
+                # Pin alternatives inside a low-level driver's setup switch
+                # are not project-selected pins. Index the upper-level call.
+                if family == 'GPIO' and any(start <= match.start() < end for start, end in pin_switches):
+                    continue
+                if argument is not None:
+                    if argument >= len(args): continue
+                    handle = re.sub(r'\s+', '', args[argument]).lstrip('&')
+                    if not re.fullmatch(handle_pattern, handle): continue
+                    candidates = [value for i, value in enumerate(args)
+                                  if i in referenced and channel_pattern and re.fullmatch(channel_pattern, value)]
+                    if len(candidates) > 1: continue
+                    channel = candidates[0] if candidates else fixed_channel
+                    if channel_pattern and not channel: continue
+                    if family == 'PWM':
+                        if channel[-1] not in channel_lines: continue
+                        register_line = channel_lines[channel[-1]]
+                elif args != ['']:
+                    continue
+                else:
+                    handle = fixed_channel
+                    args = []
+                status = 'OLED 显示屏 · 初始化调用' if family == 'DISPLAY' else '自定义驱动接口 · 调用已定位'
+            elif not re.fullmatch(r'[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)?', handle):
+                continue
+            elif api.startswith('HAL_TIM_Encoder_'):
                 family = 'ENCODER'
             elif api in {'__HAL_TIM_GET_COUNTER','__HAL_TIM_SET_COUNTER','TIM_GetCounter'}:
                 family = 'COUNTER'
@@ -60,11 +181,28 @@ def inventory(root, texts, hashes):
             key = f'{relative}::{family}::{handle}::{channel}'
             item = endpoints.setdefault(key, {'id': key, 'family': family, 'handle': handle,
                                               'channel': channel, 'path': relative, 'calls': [],
-                                              'status': '接口线索 · 设备类型待识别'})
+                                              'status': status})
             line = text.count('\n', 0, match.start())+1
             item['calls'].append({'api': api, 'line': line, 'arguments': args,
                                   'sha256': hashes[relative]})
+            if api=='HAL_GPIO_ReadPin':
+                prefix=code[max(0,code.rfind('\n',0,match.start())+1):match.start()]
+                sampled=re.search(r'\b(\w+)\s*\.\s*val\s*=\s*$',prefix)
+                if sampled:
+                    symbol=re.escape(sampled[1])
+                    member=r'\b'+symbol+r'\s*\.\s*'
+                    if all(re.search(r'\bif\s*\(\s*'+member+rf'val\s*==\s*{now}\s*&&\s*'+member+
+                                     rf'last\s*==\s*{before}\s*\)\s*\{{?\s*'+member+field+r'\s*=\s*1\s*;',code)
+                           for field,now,before in [('down',0,1),('up',1,0)]) and re.search(member+r'last\s*=\s*'+member+r'val\s*;',code):
+                        item['button_symbol']=sampled[1]
             modules[relative] = path
+            if api in wrappers:
+                wrapper_drivers.setdefault(relative, set()).add(driver)
+                driver_path = driver.relative_to(root).as_posix()
+                proof = {'path': driver_path, 'line': register_line, 'sha256': hashes[driver_path],
+                         'role': '驱动实现' if argument is None else '底层寄存器访问'}
+                evidence = item.setdefault('register_evidence', [])
+                if proof not in evidence: evidence.append(proof)
         # Vendor/module APIs may wrap the bus in another file. Preserve their
         # application entry even when there is no HAL call at this call site.
         signature_text = code+'\n'+path.name+'\n'+'\n'.join(re.findall(r'^\s*#\s*include\s*"([^"\n]+)"', text, re.M))
@@ -106,14 +244,9 @@ def inventory(root, texts, hashes):
     excluded_tables = []
     # Bring in callers of project bus wrappers, so a generic read_register()
     # helper doesn't hide the actual sensor's register operations from the AI.
-    definitions = {}
-    for source, text in texts.items():
-        if source.suffix not in {'.c', '.cpp'}: continue
-        for match in re.finditer(r'(?m)^[ \t]*(?!static\b)(?:\w+[ \t*]+)+(\w+)\s*\([^;{}]*\)\s*\{', masked(text)):
-            definitions.setdefault(match[1], []).append(source)
     for relative, path in modules.items():
-        related = [path]
-        frontier = [path]
+        related = [path, *sorted(wrapper_drivers.get(relative, set()) - {path})]
+        frontier = list(related)
         # gpio.c -> gpio.h -> main.h is a normal CubeMX chain. Restrict this
         # traversal to unambiguous project headers; do not attach every header.
         for _ in range(3):

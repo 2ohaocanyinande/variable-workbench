@@ -60,7 +60,7 @@ def hints(endpoint, snippets):
             result[-1]['components']=[
                 {'name':'LSM6DSR · 加速度 3 轴','state':'发现加速度读取入口，需验证调用和采样' if re.search(r'\bIMU963RA_GetAccel\s*\(',code) else '本次未见读取入口'},
                 {'name':'LSM6DSR · 陀螺仪 3 轴','state':'发现陀螺仪读取入口，需验证调用和采样' if re.search(r'\bIMU963RA_GetGyro\s*\(',code) else '本次未见读取入口'},
-                {'name':'QMC5883L · 磁力计 3 轴','state':'存在读取相关代码，仍需核对调用与采样' if magnetic_read else '仅发现寄存器定义，未发现初始化／采样调用'}]
+                {'name':'QMC5883L · 磁力计 3 轴','state':'初检片段有读取相关标识，可细检测调用与采样' if magnetic_read else '初检片段仅见寄存器定义，可细检测完整驱动'}]
     if not result and endpoint['family'] == 'GPIO':
         # A short family alias + CS/interrupt wiring is only a tentative category.
         # ISM can refer to other products; keep this explicit rather than inventing

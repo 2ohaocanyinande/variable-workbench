@@ -67,7 +67,7 @@ class TelemetryTests(unittest.TestCase):
         r.stop();saved,rows=t.load(self.base,meta['id'])
         self.assertFalse(rows);self.assertEqual(saved['invalid_lines'],1)
 
-    def test_http_demo_analysis_report_and_csv_download(self):
+    def test_http_saved_record_analysis_report_and_csv_download(self):
         with patch.object(w,'STATE',Path(self.tmp.name)),patch.object(w,'RECORDER',None):
             server=w.ThreadingHTTPServer(('127.0.0.1',0),w.Handler)
             threading.Thread(target=server.serve_forever,daemon=True).start()
@@ -76,7 +76,7 @@ class TelemetryTests(unittest.TestCase):
                 encoded=None if body is None else json.dumps(body).encode()
                 return opener.open(urllib.request.Request(f'http://127.0.0.1:{server.server_port}/api/{route}',data=encoded),timeout=3)
             try:
-                with request('record-demo',{}) as r:meta=json.load(r)
+                meta=t.demo(w.STATE/'records')
                 with request('record-analyze',{'id':meta['id'],'channel':'encoder_count','kind':'encoder','period':4096,'cpr':1024}) as r:report=json.load(r)
                 self.assertTrue(Path(report['report_path']).is_file())
                 with request('record-download?id='+meta['id']) as r:

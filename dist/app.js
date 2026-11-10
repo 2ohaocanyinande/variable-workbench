@@ -35,7 +35,7 @@ async function api(path, body) {
 function notice(text, error=false) { $('notice').textContent = text; $('notice').className = error ? 'error' : ''; }
 function element(tag, text, className) { const n=document.createElement(tag); if(text!==undefined)n.textContent=text; if(className)n.className=className;return n; }
 function renderFields() {
-  const scan=state.scan;if(!scan)return;$('choose').hidden=scan.platform==='stm32';$('panel').hidden=scan.platform==='stm32';$('template-section').hidden=scan.platform!=='stm32';
+  const scan=state.scan;if(!scan)return;$('choose').hidden=scan.platform==='stm32';$('panel').hidden=scan.platform==='stm32';
   $('project-path').value=scan.root;
   $('file-count').textContent=scan.file_count+' 个源文件 / 配置';
   $('build-source').textContent=scan.build_source;
@@ -44,7 +44,7 @@ function renderFields() {
   $('total').textContent=scan.fields.length;
   $('supported').textContent=scan.fields.filter(f=>f.selectable).length;
   $('pending').textContent=scan.fields.filter(f=>!f.selectable).length;
-  renderInstances();renderUsage();renderDevices();renderPid();updateWorkspace();
+  renderInstances();renderUsage();renderDevices();renderPid();renderRtos(scan.rtos);updateWorkspace();
   const filter=$('filter').value.toLowerCase();$('fields').textContent='';
   for(const f of scan.fields) {
     if(![f.id,f.label,f.module,f.data_source].join(' ').toLowerCase().includes(filter))continue;
@@ -60,6 +60,7 @@ function renderFields() {
 async function showSource(e) {
   try {
     const result=await api('source?path='+encodeURIComponent(e.path)+'&line='+e.line);
+    $('pid-apply').hidden=true;
     $('source-title').textContent=e.role+' · '+result.path;
     $('source-status').textContent=result.changed?'源码已变化，此绑定需要复核':'文件哈希与扫描记录一致 · '+e.sha256.slice(0,16);
     $('source-code').textContent='';
@@ -160,7 +161,7 @@ function renderUsage(){
   for(const f of report.findings){const row=element('tr'),name=element('td');name.append(element('span',f.candidate.symbol,'field-name'),element('span',f.candidate.path+':'+f.candidate.line+' · '+f.candidate.scope,'sub'));const askVar=element('button','问此变量','outline ask-item');askVar.onclick=()=>openQuestion('usage:'+f.candidate.id);name.append(askVar);const proof=element('td');for(const e of f.evidence){const b=element('button',e.path+':'+e.line,'source-link');b.onclick=()=>showSource(e);proof.append(b,element('span',e.quote,'sub'));}row.append(name,element('td',f.purpose),element('td',f.reason),proof,element('td','AI 推测 · 待确认读写入口'));table.append(row);}
   $('usage-results').append(table);
 }
-action('usage-preview',async()=>{const r=await api('analyze-usage',{preview:true,scope:$('usage-scope').value,query:$('usage-query').value});$('source-title').textContent='发送前预览（此操作不调用模型）';$('source-status').textContent='包含 '+r.packet.coverage.sent+' 个变量，输入约 '+r.bytes+' 字节。只有点击分析才发送。';$('source-code').textContent=JSON.stringify(r.packet,null,2);$('source-modal').showModal();});
+action('usage-preview',async()=>{const r=await api('analyze-usage',{preview:true,scope:$('usage-scope').value,query:$('usage-query').value});$('pid-apply').hidden=true;$('source-title').textContent='发送前预览（此操作不调用模型）';$('source-status').textContent='包含 '+r.packet.coverage.sent+' 个变量，输入约 '+r.bytes+' 字节。只有点击分析才发送。';$('source-code').textContent=JSON.stringify(r.packet,null,2);$('source-modal').showModal();});
 async function runAnalysis(mode='variables'){
   const deviceMode=mode==='devices',prefix=deviceMode?'device':'usage';
   const button=$(deviceMode?'device-analyze':'usage-analyze'),status=$(prefix+'-status'),text=$(prefix+'-status-text'),spinner=$(prefix+'-spinner');
@@ -177,7 +178,7 @@ async function runAnalysis(mode='variables'){
     const response=await fetch('/api/analyze-usage',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({mode,scope:$('usage-scope').value,query:$('usage-query').value||'分析变量的实际用途，解释配置、状态、控制与收发数据，名称仅作辅助'}),signal:controller.signal});
     let r;try{r=await response.json();}catch(e){throw new Error('本地服务未返回有效结果，请检查程序是否仍在运行。');}
     if(!response.ok)throw new Error(r.error||'分析失败，请重试。');
-    if(deviceMode){state.scan.device_report=r;chosenDevices.clear();renderDevices();}else{state.scan.usage_report=r;renderUsage();}status.className='done';text.textContent='分析完成 · 耗时 '+Math.ceil((Date.now()-started)/1000)+' 秒 · 返回 '+(deviceMode?r.devices.length+' 个设备候选':r.findings.length+' 项用途说明')+'。';if(deviceMode&&r.warnings?.length){status.className=r.devices.length?'partial':'failed';text.textContent=(r.devices.length?'部分完成':'未获得可核验结果')+' · 保留 '+r.devices.length+' 项，跳过 '+r.warnings.length+' 项，原因见下方。';}notice(deviceMode?'设备分析结束，请查看清单及核验提示。':'用途分析完成，结果在分析区域下方。');
+    if(deviceMode){state.scan.device_report=r;chosenDevices.clear();renderDevices();}else{state.scan.usage_report=r;renderUsage();}status.className='done';text.textContent='分析完成 · 耗时 '+Math.ceil((Date.now()-started)/1000)+' 秒 · 返回 '+(deviceMode?r.devices.length+' 个设备候选':r.findings.length+' 项用途说明')+'。';if(deviceMode&&r.warnings?.length){status.className=r.devices.length?'':'failed';text.textContent=(r.devices.length?'部分完成':'未获得可核验结果')+' · 保留 '+r.devices.length+' 项，跳过 '+r.warnings.length+' 项，原因见下方。';}notice(deviceMode?'设备分析结束，请查看清单及核验提示。':'用途分析完成，结果在分析区域下方。');
     $(deviceMode?'device-list':'usage-results').scrollIntoView({behavior:'smooth',block:'nearest'});
   }catch(e){status.className='failed';text.textContent=e.name==='AbortError'?'等待超过 110 秒，已停止本页等待。后台请求可能仍在结束中，请稍后重试。':e.message;notice('分析未完成，请看分析按钮下方的错误说明。',true);
   }finally{clearInterval(timer);clearTimeout(timeout);spinner.hidden=true;button.disabled=false;button.textContent=deviceMode?'AI 识别设备':'分析变量用途';button.removeAttribute('aria-busy');}
@@ -215,21 +216,249 @@ function deviceSelection(){
   if(typeof updateTemplateVisibility==='function')updateTemplateVisibility();
   $('device-selection').textContent=chosenDevices.size?'已选择 '+chosenDevices.size+' 项关注设备。此处可命名和查看功能，STM32 实时读写仍需适配通信协议。':'勾选你想关注的设备；这里只选择和命名，不会向硬件发送指令。';
 }
+function reviewSourceLink(item){
+  const button=element('button',item.role+' · '+item.path+':'+item.line,'source-link');
+  button.onclick=()=>showSource(item);
+  return button;
+}
+
+let deviceReviewRows=[];
+let batchReviewRunning=false;
+
+function syncDeviceReviewButton(){
+  $('device-review-all').disabled=batchReviewRunning||!deviceReviewRows.length||deviceReviewRows.some(row=>row.button.disabled);
+}
+
+async function runDeviceReview({device,scope,button,output,numericWarning},collapsed=false){
+  const scan=state.scan;
+  const report=scan.device_report;
+  button.disabled=true;
+  syncDeviceReviewButton();
+  output.setAttribute('aria-live',collapsed?'off':'polite');
+  output.textContent='正在本地核对驱动、读写操作和调用路径…';
+  try{
+    const result=await api('device-review',{root:scan.root,project_hash:scan.project_hash,id:device.id,scope});
+    if(state.scan?.root!==scan.root||state.scan?.project_hash!==scan.project_hash||state.scan?.device_report!==report)return 'stale';
+    const numericClaims=result.numeric_claims||[];
+    const priorityClaims=numericClaims.filter(item=>item.priority!==false);
+    const pending=priorityClaims.filter(item=>item.status!=='verified').length;
+    const needsAttention=!!(pending||result.conflicts.length);
+    output.textContent='';
+    const content=collapsed?element('details'):output;
+    if(collapsed){
+      content.append(element('summary',needsAttention?'待核对 · 查看结果':'已复核 · 查看结果',
+        'device-result '+(needsAttention?'device-result-pending':'device-result-done')));
+      output.append(content);
+    }else{
+      content.append(element('span',needsAttention?'有待核对项':'已复核',
+        'device-result '+(needsAttention?'device-result-pending':'device-result-done')));
+    }
+    content.append(element('p','已复核 '+result.files_checked+' 个源码文件。'+(result.partial?'大工程只覆盖部分文件。':'')+result.scope,'hint'));
+    for(const conflict of result.conflicts)content.append(element('p',conflict,'validation-warning'));
+    if(numericWarning){
+      numericWarning.hidden=!pending&&!result.conflicts.length;
+      numericWarning.textContent=pending?'还有 '+pending+' 项关键参数待核对，见下方依据。':'设备归属仍有冲突，见下方依据。';
+    }
+    for(const [claims,title,open] of [[priorityClaims,'关键参数复核',true],[numericClaims.filter(item=>item.priority===false),'实现细节（参考）',false]]){
+      if(!claims.length)continue;
+      const detail=element('details');detail.open=open;
+      detail.append(element('summary',title+(open?' · '+(claims.length-pending)+' / '+claims.length+' 项已核对':'')));
+      for(const item of claims){
+        detail.append(element('p',item.feature+' · '+item.reason,item.status==='conflict'?'validation-warning':'hint'));
+        for(const proof of item.evidence)detail.append(reviewSourceLink(proof));
+      }
+      content.append(detail);
+    }
+    if(result.unit_claims?.length){
+      const units=element('details');
+      units.append(element('summary','物理单位与换算（可选）'));
+      for(const item of result.unit_claims)units.append(element('p',item.feature+' · '+item.reason,'hint'));
+      content.append(units);
+    }
+    if(!result.components.length)content.append(element('p','已定位接口调用，具体型号仍缺少可归属的驱动证据。','hint'));
+    for(const component of result.components){
+      const detail=element('details');detail.open=true;
+      detail.append(element('summary',component.name));
+      if(component.definitions.length){
+        detail.append(element('p','寄存器／标识定义','hint'));
+        for(const item of component.definitions)detail.append(reviewSourceLink(item));
+      }
+      for(const [key,label] of [['initialization','初始化／配置'],['sampling','读取／采样']]){
+        const items=component[key];
+        detail.append(element('p',label+' · '+(items.length?'找到相关入口或操作':'所查代码未发现对应操作'),'hint'));
+        for(const item of items){
+          detail.append(reviewSourceLink(item.entry));
+          if(item.operation)detail.append(reviewSourceLink(item.operation));
+          else detail.append(element('span','驱动入口待核对，具体总线操作未确认','sub'));
+          detail.append(element('span',item.from_main?'找到从 main 出发的静态调用路径':'从 main 出发的静态路径未定位','sub'));
+          for(const step of item.chain)detail.append(reviewSourceLink(step));
+        }
+      }
+      content.append(detail);
+    }
+    const interfaces=element('details');interfaces.append(element('summary','选中接口的调用依据'));
+    for(const item of result.interfaces)interfaces.append(reviewSourceLink(item));
+    content.append(interfaces);
+    return needsAttention?'attention':'done';
+  }catch(error){output.textContent=error.message;return 'failed';}
+  finally{button.disabled=batchReviewRunning;syncDeviceReviewButton();}
+}
+
+$('device-review-all').onclick=async()=>{
+  if($('device-review-all').disabled)return;
+  const rows=deviceReviewRows,status=$('device-review-progress');
+  if(!rows.length)return;
+  batchReviewRunning=true;
+  for(const row of rows)row.button.disabled=true;
+  syncDeviceReviewButton();
+  status.hidden=false;
+  const counts={done:0,attention:0,failed:0};
+  try{
+    for(const [i,row] of rows.entries()){
+      if(rows!==deviceReviewRows)return;
+      status.textContent='正在本地复核 '+(i+1)+' / '+rows.length+' · '+row.device.name;
+      const result=await runDeviceReview(row,true);
+      if(rows!==deviceReviewRows||result==='stale')return;
+      counts[result]++;
+    }
+    status.textContent='细检测完成 · '+rows.length+' 项中 '+counts.done+' 项已复核，'+counts.attention+' 项待核对，'+counts.failed+' 项执行失败。';
+  }finally{
+    if(rows===deviceReviewRows&&!status.textContent.startsWith('细检测完成'))status.textContent='设备清单已更新，请重新开始细检测。';
+    batchReviewRunning=false;
+    for(const row of deviceReviewRows)row.button.disabled=false;
+    syncDeviceReviewButton();
+  }
+};
+
+function deviceEndpointKey(endpoint){
+  if(endpoint.family!=='PWM')return endpoint.id;
+  const timer=/^TIM_?(\d+)$/.exec(endpoint.handle);
+  const channel=/^TIM(\d+)_CH([1-4])$/.exec(endpoint.channel);
+  const drivers=[...new Set((endpoint.register_evidence||[]).map(e=>e.path))];
+  if(!timer||!channel||timer[1]!==channel[1]||drivers.length!==1)return endpoint.id;
+  return 'pwm:'+drivers[0]+':'+timer[1]+':'+channel[2];
+}
+
+function endpointEvidence(endpoint){
+  return [...endpoint.calls.slice(0,3).map(c=>({path:endpoint.path,line:c.line,sha256:c.sha256,role:c.api})),...(endpoint.register_evidence||[])];
+}
+
+const deviceKinds={motor:'电机',servo:'舵机',sensor:'传感器',sensor_candidate:'传感器线索',display:'显示屏',encoder:'编码器',button:'按键'};
+
 function renderDevices(){
   const inventory=state.scan?.inventory,report=state.scan?.device_report;const box=$('device-list');box.textContent='';
+  deviceReviewRows=[];
+  $('device-review-progress').hidden=true;
   const endpoints=inventory?.endpoints||[],devices=report?.devices;
+  const groups=new Map();
+  for(const endpoint of endpoints){
+    const key=deviceEndpointKey(endpoint);
+    if(!groups.has(key))groups.set(key,[]);
+    groups.get(key).push(endpoint);
+  }
+  renderDeviceDistribution([...groups.values()].map(group=>group[0]));
   $('device-count').textContent=devices?'已整理 '+devices.length+' 项候选：AI '+(report.ai_devices_count??devices.length)+' 项'+(report.local_clues_count?'，本地补充线索 '+report.local_clues_count+' 项':'')+'。代码引文已核对，设备类型与实例仍需确认。':endpoints.length?'本地找到 '+endpoints.length+' 项接口线索，尚未确定对应哪些物理设备。点击「AI 识别设备」继续。':'本次没有匹配到可分组的接口。仍可在下方分析变量用途；未匹配不代表没有设备。';
-  const rows=devices?.length?devices:endpoints.map(e=>{const hint=e.module_hints?.length===1?e.module_hints[0]:null;return {id:e.id,name:hint?hint.category+'（'+hint.model+'）':e.family+' 接口（设备类型待识别）',kind:'unknown',category:hint?.category,model:hint?.model,module_model:hint?.module_model,components:hint?.components,driver_state:hint?.driver_state,classification_basis:hint?.confidence,instance:e.handle+(e.channel?' / '+e.channel:''),interfaces:[e],features:['需要结合驱动实现判断设备功能'],evidence:e.calls.slice(0,3).map(c=>({path:e.path,line:c.line,sha256:c.sha256,role:c.api})),status:hint?'本地常见模块线索 · 待确认':'本地接口线索'};});
+  const byId=new Map(endpoints.map(e=>[e.id,e]));
+  const covered=new Set();
+  const recognizedRows=(devices||[]).map(d=>{
+    const claimed=new Set(d.endpoint_ids||[]);
+    const related=new Set();
+    for(const id of claimed){
+      const endpoint=byId.get(id);
+      if(!endpoint)continue;
+      const key=deviceEndpointKey(endpoint);
+      covered.add(key);
+      for(const sibling of groups.get(key))if(!claimed.has(sibling.id))related.add(sibling);
+    }
+    return {...d,relatedCalls:[...related].flatMap(endpointEvidence)};
+  });
+  const localRows=[...groups].filter(([key])=>!covered.has(key)).map(([,group])=>{
+    const e=group[0];
+    const hint=e.module_hints?.length===1?e.module_hints[0]:null;
+    const name=e.button_symbol?'按键 '+e.button_symbol:hint?hint.category+'（'+hint.model+'）':e.family==='DISPLAY'?'OLED 显示屏':e.family+' 接口（设备类型待识别）';
+    const evidence=group.flatMap(endpointEvidence).filter((item,index,all)=>all.findIndex(e=>e.path===item.path&&e.line===item.line)===index);
+    return {id:e.id,name,kind:e.button_symbol?'button':'unknown',category:hint?.category,model:hint?.model,module_model:hint?.module_model,components:hint?.components,driver_state:hint?.driver_state,classification_basis:hint?.confidence,instance:e.button_symbol||e.handle+(e.channel?' / '+e.channel:''),interfaces:[e],features:[e.button_symbol?'读取 GPIO 电平，检测按下和松开':e.family==='DISPLAY'?'源码调用了屏幕初始化':'需要结合驱动实现判断设备功能'],evidence,status:e.button_symbol?'本地按键线索':hint?'本地常见模块线索 · 待确认':(e.status||'本地接口线索'),questionKind:'interface'};
+  });
+  const rows=[...recognizedRows,...localRows];
+  if(devices?.length&&localRows.length)$('device-count').textContent+=' 另保留 '+localRows.length+' 项未归入候选的本地接口线索。';
   if(report?.coverage?.partial)$('device-count').textContent+=' 本次只覆盖部分接口或代码，清单可能不完整。';
   if(report?.restored_from_cache)$('device-count').textContent+=' 已恢复源码哈希一致的历史模型结果，结论仍需核对。';
-  if(report?.warnings?.length){const warning=element('div',undefined,'validation-warning');warning.append(element('strong','部分 AI 结果未通过核验：已保留 '+(report.ai_devices_count??devices.length)+' 项，跳过 '+report.warnings.length+' 项。'));for(const item of report.warnings)warning.append(element('p','第 '+item.index+' 项（'+item.name+'）：'+item.reason));if(!devices.length)warning.append(element('p','没有得到可核验的设备结果，以下仍显示本地接口线索。请重试；程序不会采用虚构引用。'));box.append(warning);}
+  if(report?.warnings?.length){
+    const warning=element('details',undefined,devices.length?'device-review-notes':'validation-warning');
+    warning.open=!devices.length;
+    warning.append(element('summary','AI 跳过 '+report.warnings.length+' 项 · 查看原因'));
+    for(const item of report.warnings)warning.append(element('p',item.name+' · '+item.reason,'hint'));
+    if(!devices.length)warning.append(element('p','没有得到可核验的设备结果，以下显示本地接口线索。'));
+    box.append(warning);
+  }
   const table=element('table'),head=element('tr');for(const t of ['选择','设备 / 显示名称','接口 / 实例','功能与判断依据'])head.append(element('th',t));table.append(head);
   for(const d of rows){const row=element('tr'),select=element('td'),check=element('input');check.type='checkbox';check.checked=chosenDevices.has(d.id);check.setAttribute('aria-label','关注 '+d.name+' '+d.instance);check.onchange=()=>{if(check.checked)chosenDevices.add(d.id);else chosenDevices.delete(d.id);deviceSelection();};select.append(check);
-    const name=element('td'),alias=element('input');const ask=element('button','问这项','outline ask-item');ask.onclick=()=>openQuestion((devices?.length?'device:':'interface:')+d.id);name.append(ask);alias.value=deviceNames.get(d.id)||d.name;alias.setAttribute('aria-label',d.instance+' 的显示名称');alias.maxLength=80;alias.oninput=()=>deviceNames.set(d.id,alias.value);name.append(alias,element('span',d.status,'sub'));if(d.category)name.append(element('span','类别：'+d.category,'sub'));if(d.model)name.append(element('span','型号：'+d.model,'sub'));if(d.driver_state)name.append(element('span','驱动：'+d.driver_state,'sub'));if(d.classification_basis)name.append(element('span',d.classification_basis,'sub'));if(d.module_model)name.append(element('strong',d.module_model,'sub'));for(const component of d.components||[])name.append(element('span',component.name+'：'+component.state,'module-component'));
-    if(d.features.some(f=>/[0-9°%]/.test(f)))name.append(element('span','功能中的数值／单位尚未逐项验证；引用存在不代表参数已正确归属此设备。','sub validation-warning'));
-    const link=element('td');link.append(element('span',d.instance,'field-name'),element('span',d.interfaces.map(e=>e.family+' '+e.handle+(e.channel?' / '+e.channel:'')).join('、'),'sub'));
-    const info=element('td');for(const feature of d.features)info.append(element('span',feature,'sub'));const details=element('details');details.append(element('summary','为什么这样判断？'));if(d.reason)details.append(element('p',d.reason,'hint'));if(d.instance_binding)details.append(element('p','实例溯源：'+d.instance_binding,'hint'));for(const repair of d.local_repairs||[])details.append(element('p',repair,'hint'));if(d.evidence.some(e=>e.reference_corrected))details.append(element('p','重叠片段的引用编号已按原代码重新定位。','hint'));for(const e of d.evidence){const button=element('button',e.path+':'+e.line,'source-link');button.onclick=()=>showSource(e);details.append(button,element('br'));}info.append(details);row.append(select,name,link,info);table.append(row);
-  }box.append(table);deviceSelection();
+    const targetKind=d.questionKind||'device';
+    const name=element('td'),alias=element('input');const ask=element('button','问这项','outline ask-item');ask.onclick=()=>openQuestion(targetKind+':'+d.id);alias.value=deviceNames.get(d.id)||d.name;alias.setAttribute('aria-label',d.instance+' 的显示名称');alias.maxLength=80;alias.oninput=()=>deviceNames.set(d.id,alias.value);
+    const nameControls=element('div',undefined,'device-name-controls');
+    nameControls.append(alias,ask);name.append(nameControls);
+    const meta=element('div',undefined,'device-meta');
+    if(deviceKinds[d.kind])meta.append(element('span',deviceKinds[d.kind],'device-kind'));
+    meta.append(element('span',d.status,'device-origin'));
+    name.append(meta);
+    if(d.category)name.append(element('span','类别：'+d.category,'sub'));if(d.model)name.append(element('span',(d.module_model?'芯片线索：':'型号：')+d.model,'sub'));if(d.driver_state)name.append(element('span','驱动：'+d.driver_state,'sub'));if(d.classification_basis)name.append(element('span',d.classification_basis,'sub'));if(d.module_model)name.append(element('strong',d.module_model,'sub'));for(const component of d.components||[])name.append(element('span',component.name+'：'+component.state,'module-component'));
+    const link=element('td');
+    link.append(element('span',d.instance,'field-name'));
+    const interfaces=element('div',undefined,'device-interfaces');
+    for(const e of d.interfaces){
+      const item=element('span',undefined,'device-interface');
+      item.append(element('strong',e.family),element('code',e.handle+(e.channel?' / '+e.channel:'')));
+      interfaces.append(item);
+    }
+    link.append(interfaces);
+    const info=element('td');
+    for(const feature of d.features)info.append(element('span',feature,'device-feature'));
+    const details=element('details');
+    details.append(element('summary','为什么这样判断？'));
+    const needsNumericReview=!!d.numeric_review_required;
+    const numericWarning=needsNumericReview?
+      element('p','关键参数待核对。点击「细检测」查看源码依据。','validation-warning'):null;
+    if(numericWarning)name.append(numericWarning);
+    if(d.reason)details.append(element('p',d.reason,'hint'));if(d.instance_binding)details.append(element('p','实例溯源：'+d.instance_binding,'hint'));for(const repair of d.local_repairs||[])details.append(element('p',repair,'hint'));if(d.evidence.some(e=>e.reference_corrected))details.append(element('p','重叠片段的引用编号已按原代码重新定位。','hint'));for(const e of d.evidence){const button=element('button',e.path+':'+e.line,'source-link');button.onclick=()=>showSource(e);details.append(button,element('br'));}info.append(details);
+    if(d.relatedCalls?.length){
+      const existing=new Set(d.evidence.map(e=>e.path+':'+e.line));
+      const links=element('details');links.append(element('summary','同一 PWM 通道的其他源码位置'));
+      for(const e of d.relatedCalls){
+        const label=e.path+':'+e.line;
+        if(existing.has(label))continue;
+        existing.add(label);
+        const button=element('button',label,'source-link');button.onclick=()=>showSource(e);
+        links.append(button,element('br'));
+      }
+      if(links.children.length>1)info.append(links);
+    }
+    const reviewButton=element('button','细检测','outline');
+    const reviewOutput=element('div',undefined,'device-review');reviewOutput.setAttribute('aria-live','polite');
+    const reviewRow={device:d,scope:targetKind,button:reviewButton,output:reviewOutput,numericWarning};
+    reviewButton.disabled=batchReviewRunning;
+    reviewButton.onclick=()=>runDeviceReview(reviewRow);
+    deviceReviewRows.push(reviewRow);
+    info.append(reviewButton,reviewOutput);row.append(select,name,link,info);table.append(row);
+  }box.append(table);deviceSelection();syncDeviceReviewButton();
+}
+
+function renderDeviceDistribution(endpoints){
+  const box=$('device-graphic');
+  box.textContent='';
+  if(!endpoints.length)return;
+  const counts=new Map();
+  for(const endpoint of endpoints)counts.set(endpoint.family,(counts.get(endpoint.family)||0)+1);
+  const distribution=[...counts].sort((a,b)=>b[1]-a[1]||a[0].localeCompare(b[0]));
+  const max=distribution[0][1],bars=element('div',undefined,'viz-bus-grid');
+  const heading=element('div',undefined,'viz-heading');
+  heading.append(element('h3','接口线索分布'),element('span',endpoints.length+' 项接口线索','hint'));
+  for(const [family,count] of distribution){
+    const row=element('div',undefined,'viz-bus-row'),track=element('span',undefined,'viz-track'),fill=element('span');
+    fill.style.width=(count/max*100)+'%';
+    track.setAttribute('aria-hidden','true');track.append(fill);
+    row.append(element('code',family),track,element('strong',String(count)));bars.append(row);
+  }
+  box.append(heading,bars);
 }
 
 function renderSerialConnection(){
@@ -256,13 +485,25 @@ function renderSerialData(data){
   if(data.history_truncated)$('serial-send-status').textContent='较早记录已滚动移除，接收计数保留。';
   for(const e of data.events){if(e.id>serialCursor){serialEvents.push(e);serialCursor=e.id;}}
   serialEvents=serialEvents.slice(-200);drawSerialEvents();
-  $('serial-count').textContent='接收 '+data.rx_bytes+' 字节 · 发送 '+data.tx_bytes+' 字节';
+  renderSerialCounts(data.rx_bytes,data.tx_bytes);
+}
+function renderSerialCounts(rx,tx){
+  const counters=$('serial-count');
+  counters.textContent='';
+  for(const [direction,arrow,label,count] of [['rx','↓','接收',rx],['tx','↑','发送',tx]]){
+    const counter=element('span',undefined,'viz-serial-count '+direction);
+    const icon=element('span',arrow,'viz-serial-icon');
+    icon.setAttribute('aria-hidden','true');
+    counter.append(icon,element('span',label),element('strong',Number(count).toLocaleString('zh-CN')),element('span','字节'));
+    counters.append(counter);
+  }
 }
 $('serial-mode').onchange=()=>{serialModeTouched=true;renderSerialConnection();};
 $('serial-view').onchange=drawSerialEvents;
 $('serial-format').onchange=()=>{$('serial-ending').disabled=$('serial-format').value==='hex';};
 action('serial-send',async()=>{const r=await api('serial-send',{content:$('serial-input').value,format:$('serial-format').value,ending:$('serial-ending').value});$('serial-send-status').textContent='已发送 '+r.sent_bytes+' 字节；设备是否接受需查看返回。';});
-action('serial-clear',async()=>{await api('serial-clear',{});serialCursor=0;serialSession=null;serialEvents=[];drawSerialEvents();$('serial-count').textContent='接收 0 字节 · 发送 0 字节';});
+action('serial-clear',async()=>{await api('serial-clear',{});serialCursor=0;serialSession=null;serialEvents=[];drawSerialEvents();renderSerialCounts(0,0);});
+renderSerialCounts(0,0);
 
 const pidEditors=new Map();
 function renderPid(){
@@ -271,8 +512,23 @@ function renderPid(){
   $('pid-save').disabled=!loops.length;$('pid-analyze').disabled=!loops.length;
   const suggestions=new Map((index?.suggestions||[]).map(s=>[s.id,s]));
   const drafts=new Map((index?.draft?.loops||[]).map(s=>[s.id,s]));
-  const names=new Map(loops.map(l=>[l.id,suggestions.get(l.id)?.name||l.symbol]));
-  for(const e of index?.edges||[]){const row=element('p',names.get(e.from)+' → '+names.get(e.to)+' · '+e.kind+' · 信号 '+e.signal+' 进入 '+e.argument,'pid-edge');for(const proof of e.evidence){const b=element('button',proof.path+':'+proof.line,'source-link');b.onclick=()=>showSource(proof);row.append(element('br'),b);} $('pid-edges').append(row);}
+  const names=new Map(loops.map(l=>[l.id,drafts.get(l.id)?.name||suggestions.get(l.id)?.name||l.symbol]));
+  for(const edge of index?.edges||[]){
+    if(!names.has(edge.from)||!names.has(edge.to))continue;
+    const row=element('article',undefined,'viz-pid-edge'),flow=element('div',undefined,'viz-pid-flow');
+    const from=element('button',names.get(edge.from),'outline viz-pid-node');
+    const to=element('button',names.get(edge.to),'outline viz-pid-node');
+    from.onclick=()=>openPidCard(edge.from);
+    to.onclick=()=>openPidCard(edge.to);
+    const connector=element('div',undefined,'viz-pid-connector');
+    connector.append(element('code',edge.signal),element('span','→','viz-pid-arrow'));
+    flow.append(from,connector,to);
+    const detail=element('details',undefined,'viz-pid-proof');
+    detail.append(element('summary','查看参数与源码依据'),element('code',edge.argument));
+    for(const proof of edge.evidence)detail.append(reviewSourceLink(proof));
+    row.append(element('span',edge.kind,'viz-pid-kind'),flow,detail);
+    $('pid-edges').append(row);
+  }
   for(const loop of loops){
     const suggestion=suggestions.get(loop.id),draft=drafts.get(loop.id),card=element('details',undefined,'pid-card');
     const heading=element('summary');heading.append(element('span',draft?.name||suggestion?.name||loop.symbol,'pid-card-name'),element('span',(draft?.category||suggestion?.category||'待确认')+(suggestion&&!draft?' · 建议':''),'pid-type'),element('span',loop.symbol,'pid-code-name'));const askLoop=element('button','问此控制环','outline ask-item');askLoop.onclick=()=>openQuestion('pid:'+loop.id);card.append(heading,askLoop);
@@ -292,36 +548,216 @@ function renderPid(){
     card.append(gainGroup);const proof=element('details',undefined,'pid-proof');proof.append(element('summary','计算与源码依据'));if(aiExplanation)proof.append(aiExplanation);
     for(const e of [...loop.evidence,...loop.kernels,...loop.calls,...Object.values(loop.gains).flatMap(g=>g.sources)]){const b=element('button',e.path+':'+e.line+' · '+(e.role||e.function),'source-link');b.onclick=()=>showSource(e);proof.append(b,element('br'));}
     for(const call of loop.calls)proof.append(element('pre',call.function+'('+call.arguments.join(', ')+')'));
-    card.append(proof);$('pid-list').append(card);pidEditors.set(loop.id,{name,category,gains});
+    card.append(proof);$('pid-list').append(card);pidEditors.set(loop.id,{name,category,gains,card});
   }
+}
+function openPidCard(id){
+  const editor=pidEditors.get(id);
+  if(!editor)return;
+  editor.card.open=true;
+  editor.card.scrollIntoView({block:'nearest'});
 }
 action('pid-save',async()=>{
   const loops=[];for(const [id,editor] of pidEditors){const gains={};for(const [key,ui] of Object.entries(editor.gains)){if(ui.input.value.trim()!==''){const value=Number(ui.input.value);if(!Number.isFinite(value))throw new Error('PID 参数必须是有限数值');gains[key]={value,source_index:ui.source.value===''?null:Number(ui.source.value)};}}loops.push({id,name:editor.name.value,category:editor.category.value,gains});}
-  const r=await api('pid-config',{project_hash:state.scan.project_hash,loops});state.scan.pid.draft=r.draft;$('pid-status').textContent=r.notice;
-  $('source-title').textContent='PID 调参方案 · 源码补丁预览';$('source-status').textContent=r.patch_path+' · 未绑定参数 '+r.draft.unbound.length+' 个 · 原工程和开发板均未修改';$('source-code').textContent=r.patch||JSON.stringify(r.draft,null,2);$('source-modal').showModal();
+  const config={project_hash:state.scan.project_hash,loops};
+  const r=await api('pid-config',config);state.scan.pid.draft=r.draft;$('pid-status').textContent=r.notice;
+  $('source-title').textContent='PID 调参方案 · 源码补丁预览';
+  $('source-status').textContent=r.patch_path+' · 未绑定参数 '+r.draft.unbound.length+' 个。'+(r.write_block||'核对改动后可写入源码。');
+  $('source-code').textContent=r.patch||JSON.stringify(r.draft,null,2);
+  const apply=$('pid-apply');
+  apply.hidden=!!r.write_block;
+  apply.onclick=async()=>{
+    apply.disabled=true;
+    try{
+      const result=await api('pid-apply',{...config,preview_id:r.preview_id});
+      apply.hidden=true;
+      $('source-status').textContent=result.notice;
+      await refresh(true);
+      if(!result.refreshed)renderPid();
+      $('pid-status').textContent=result.notice;
+      $('source-modal').close();
+    }catch(error){$('source-status').textContent=error.message;}
+    finally{apply.disabled=false;}
+  };
+  $('source-modal').showModal();
 });
 action('pid-analyze',async()=>{
   const start=Date.now();$('pid-status').className='hint busy';$('pid-status').textContent='正在请求模型解释环类型…';const timer=setInterval(()=>{$('pid-status').textContent='正在等待模型 · '+Math.floor((Date.now()-start)/1000)+' 秒';},1000);
   try{const r=await api('analyze-usage',{mode:'pid'});await refresh(true);$('pid-status').textContent='采用 '+r.suggestions.length+' 条环类型建议。'+r.notice+(r.warnings?.length?' 核验提示：'+r.warnings.join('；'):'');}catch(error){$('pid-status').textContent=error.message;throw error;}finally{clearInterval(timer);$('pid-status').className='hint';}
 });
 
-let workspaceView='pid',workspaceNavigated=false;
-const workspaceViews={screen:{title:'源码屏幕预览',description:'预览屏幕内容与按键交互，边看边问。',sections:['screen-section']},demo:{title:'演示台',description:'一分钟，从看见异常到带着依据做决定。',sections:['demo-section']},pid:{title:'控制环与调参',description:'梳理控制关系，让每一次调参都有依据。',sections:['pid-section']},devices:{title:'设备清单',description:'从接口线索到设备实例，查看每一项判断的依据。',sections:['devices']},serial:{title:'串口连接',description:'连接开发板，接收日志，发送设备支持的指令。',sections:['serial']},records:{title:'记录与分析',description:'本地留存角度与编码器数据，回看趋势和异常候选。',sections:['records-section']},analysis:{title:'代码用途分析',description:'从计算、调用和赋值关系理解变量的作用。',sections:['understand']},panel:{title:'控制面板',description:'选择已适配字段，生成面板并连接固件。',sections:['choose','panel','template-section','log']}};
+const rtosIconPaths={
+  task:'m3 7 9-4 9 4-9 4-9-4Zm0 5 9 4 9-4m-18 5 9 4 9-4',
+  objects:'M4 5h16v4H4zm0 10h16v4H4zm4-6v6m8-6v6',
+  schedule:'M12 3v4m0 10v4m-9-9h4m10 0h4M7 7h10v10H7z'
+};
+function rtosIcon(kind){
+  const badge=element('span',undefined,'rtos-icon');
+  const ns='http://www.w3.org/2000/svg';
+  const svg=document.createElementNS(ns,'svg'),path=document.createElementNS(ns,'path');
+  for(const [key,value] of Object.entries({viewBox:'0 0 24 24',fill:'none',stroke:'currentColor','stroke-width':'1.65','stroke-linecap':'round','stroke-linejoin':'round','aria-hidden':'true'}))svg.setAttribute(key,value);
+  path.setAttribute('d',rtosIconPaths[kind]);svg.append(path);badge.append(svg);
+  return badge;
+}
+
+function rtosSources(evidence,label='查看源码依据'){
+  const details=element('details',undefined,'rtos-sources');
+  details.append(element('summary',label));
+  for(const e of evidence)details.append(reviewSourceLink(e));
+  return details;
+}
+
+function rtosStackValue(expression){
+  const decimal='(?:0|[1-9][0-9]*)';
+  const formula=new RegExp('^'+decimal+'(?:\\s*\\*\\s*'+decimal+')*$');
+  if(!formula.test(expression))return null;
+  const value=expression.split('*').reduce((product,factor)=>product*Number(factor),1);
+  return Number.isSafeInteger(value)?value:null;
+}
+
+function renderRtos(report){
+  const results=$('rtos-results');
+  results.textContent='';
+  if(!report){$('rtos-summary').textContent='扫描工程后查看检测结果。';return;}
+  $('rtos-summary').textContent=report.status+(report.truncated?' · 清单达到显示上限':'');
+  const stats=element('div',undefined,'rtos-stat-grid');
+  for(const [kind,label,count] of [['task','任务创建点',report.tasks.length],['objects','对象创建点',report.objects.length],['schedule','调度相关调用',report.scheduler.length]]){
+    const tile=element('div',undefined,'rtos-stat'),metric=element('div');
+    metric.append(element('strong',String(count)),element('small',label));
+    tile.append(rtosIcon(kind),metric);stats.append(tile);
+  }
+  results.append(stats);
+  if(report.evidence.length)results.append(rtosSources(report.evidence,'工程配置与头文件依据'));
+
+  if(report.tasks.length){
+    const block=element('div',undefined,'rtos-block'),list=element('div',undefined,'rtos-task-list');
+    block.append(element('h3','任务'),element('p','栈条按相同单位比较源码配置值。','hint'));
+    const stackSizes=report.tasks.map(item=>rtosStackValue(item.stack));
+    const largest=new Map();
+    for(const [i,item] of report.tasks.entries()){
+      if(stackSizes[i]!==null&&['字节','StackType_t 元素'].includes(item.stack_unit)){
+        largest.set(item.stack_unit,Math.max(largest.get(item.stack_unit)||0,stackSizes[i]));
+      }
+    }
+    const priorities={Idle:['空闲','low'],Low:['低','low'],BelowNormal:['较低','low'],Normal:['普通','normal'],AboveNormal:['较高','high'],High:['高','high'],Realtime:['实时','high']};
+    const headings=element('div',undefined,'rtos-task-columns'),taskRows=[];
+    for(const title of ['任务 / 入口','优先级','栈配置','源码位置'])headings.append(element('span',title));
+    list.append(headings);
+    for(const [i,item] of report.tasks.entries()){
+      const card=element('article',undefined,'rtos-task'),head=element('div',undefined,'rtos-task-head'),identity=element('div');
+      identity.append(element('strong',item.name));
+      if(item.entry)identity.append(element('code',item.entry));
+      head.append(rtosIcon('task'),identity);
+      const priority=element('div'),symbol=item.priority?.match(/^(?:\(\s*osPriority_t\s*\)\s*)?osPriority(Idle|Low|BelowNormal|Normal|AboveNormal|High|Realtime)$/);
+      const badge=element('span',symbol?priorities[symbol[1]][0]:item.priority||'待核对','rtos-priority');
+      badge.title=item.priority||'源码未提供显式优先级';
+      if(symbol)badge.dataset.tone=priorities[symbol[1]][1];
+      priority.append(element('span','优先级','rtos-label'),badge);
+      const stack=element('div',undefined,'rtos-stack'),value=stackSizes[i],maximum=largest.get(item.stack_unit);
+      const stackText=item.stack?(value===null?item.stack:value.toLocaleString('zh-CN'))+(item.stack_unit?' '+item.stack_unit:''):'待核对';
+      const stackValue=element('div',undefined,'rtos-stack-value');
+      stackValue.append(element('strong',stackText));
+      if(item.stack&&value!==null&&String(value)!==item.stack)stackValue.append(element('code',item.stack));
+      stack.append(element('span','栈配置','rtos-label'),stackValue);
+      if(value!==null&&maximum>0){
+        const meter=element('div',undefined,'rtos-meter'),fill=element('span');
+        meter.setAttribute('aria-hidden','true');fill.style.width=(100*value/maximum)+'%';meter.append(fill);stack.append(meter);
+      }
+      card.append(head,priority,stack,rtosSources(item.evidence,'源码依据'));
+      list.append(card);
+      taskRows.push({row:card,query:[item.name,item.entry,item.priority,badge.textContent].join(' ').toLowerCase()});
+    }
+    if(taskRows.length>6){
+      const filter=element('input',undefined,'rtos-task-filter'),empty=element('p','没有匹配的任务。','rtos-empty');
+      filter.type='search';filter.placeholder='筛选任务、入口或优先级';filter.setAttribute('aria-label',filter.placeholder);
+      empty.hidden=true;
+      filter.oninput=()=>{
+        const query=filter.value.trim().toLowerCase();
+        for(const task of taskRows)task.row.hidden=!task.query.includes(query);
+        empty.hidden=taskRows.some(task=>!task.row.hidden);
+      };
+      block.append(filter);
+      list.append(empty);
+    }
+    block.append(list);results.append(block);
+  }
+
+  if(report.scheduler.length){
+    const block=element('div',undefined,'rtos-block'),groups=new Map();
+    block.append(element('h3','调度器调用'),element('p','同一文件、同一函数中的调用按源码位置排列。','hint'));
+    for(const item of report.scheduler){
+      const key=(item.evidence[0]?.path||'')+' / '+item.caller;
+      if(!groups.has(key))groups.set(key,[]);
+      groups.get(key).push(item);
+    }
+    for(const [location,items] of groups){
+      const flow=element('ol',undefined,'rtos-flow');
+      items.sort((left,right)=>(left.evidence[0]?.line||0)-(right.evidence[0]?.line||0));
+      for(const [i,item] of items.entries()){
+        const step=element('li',undefined,'rtos-step');
+        step.append(element('span',String(i+1).padStart(2,'0'),'rtos-step-index'),element('strong',item.kind),element('code',item.api),rtosSources(item.evidence,'查看调用位置'));
+        flow.append(step);
+      }
+      block.append(element('code',location,'rtos-muted'),flow);
+    }
+    results.append(block);
+  }
+
+  const objects=element('div',undefined,'rtos-block');
+  objects.append(element('h3','队列、同步对象与定时器'));
+  if(report.objects.length){
+    const wrap=element('div',undefined,'table-wrap'),table=element('table'),head=element('tr');
+    for(const column of ['对象 / 类型','参数','所在函数','源码依据'])head.append(element('th',column));
+    table.append(head);
+    for(const item of report.objects){
+      const row=element('tr'),name=element('td'),source=element('td');
+      name.append(element('strong',item.name),element('span',item.kind,'sub'));
+      source.append(rtosSources(item.evidence));
+      const parameters=Object.entries(item.details||{}).map(([key,value])=>key+' '+value).join(' · ');
+      row.append(name,element('td',parameters||'—'),element('td',item.caller),source);table.append(row);
+    }
+    wrap.append(table);objects.append(wrap);
+  }else{
+    objects.append(element('p','所查源码未发现受支持的对象创建调用。','rtos-empty'));
+  }
+  results.append(objects);
+}
+
+let workspaceView='devices',workspaceNavigated=false;
+const workspaceViews={rtos:{title:'FreeRTOS',description:'查看任务、同步对象与调度器入口。',sections:['rtos-section']},screen:{title:'源码屏幕预览',description:'预览屏幕内容与按键交互，边看边问。',sections:['screen-section']},pid:{title:'控制环与调参',description:'梳理控制关系，让每一次调参都有依据。',sections:['pid-section']},devices:{title:'设备清单',description:'从接口线索到设备实例，查看每一项判断的依据。',sections:['devices']},serial:{title:'串口连接',description:'连接开发板，接收日志，发送设备支持的指令。',sections:['serial']},records:{title:'记录与分析',description:'本地留存角度与编码器数据，回看趋势和异常候选。',sections:['records-section']},analysis:{title:'代码用途分析',description:'从计算、调用和赋值关系理解变量的作用。',sections:['understand']},panel:{title:'控制面板',description:'选择已适配字段，生成面板并连接固件。',sections:['choose','panel','log']}};
 function showWorkspace(view){
   if(!workspaceViews[view])return;
-  workspaceView=view;document.body?.classList.toggle('template-panel-view',view==='panel'&&state.scan?.platform==='stm32');document.body?.classList.toggle('demo-mode',view==='demo');document.body?.classList.toggle('data-view',view==='records'||view==='serial'||view==='demo'||view==='screen');if(view!=='demo'){document.body?.classList.toggle('demo-presentation',false);$('demo-present').textContent='投屏模式';$('demo-present').setAttribute('aria-pressed','false');}
+  if(view==='panel'&&state.scan?.platform!=='esp32')view='devices';
+  workspaceView=view;
+  document.body?.classList.toggle('data-view',['records','serial','screen'].includes(view));
   for(const [key,config] of Object.entries(workspaceViews)){
     $('nav-'+key).classList.toggle('active',key===view);$('nav-'+key).setAttribute('aria-current',key===view?'page':'false');
     for(const id of config.sections){$(id).classList.add('workspace-section');$(id).classList.toggle('view-active',key===view);}
   }
-  $('workspace-title').textContent=workspaceViews[view].title;$('workspace-description').textContent=view==='panel'&&state.scan?.platform==='stm32'?'选择设备与控制环，用模板生成本机模拟面板。':workspaceViews[view].description;if(view==='screen'&&typeof loadScreen==='function')loadScreen();if(view==='demo'&&typeof renderShowcase==='function')renderShowcase();if(view==='panel'&&state.scan?.platform==='stm32'&&typeof refreshTemplatePanel==='function')refreshTemplatePanel();if(view==='records')refreshRecords().catch(e=>{$('record-status').textContent=e.message;});
+  $('workspace-title').textContent=workspaceViews[view].title;
+  $('workspace-description').textContent=workspaceViews[view].description;
+  if(view==='screen'&&typeof loadScreen==='function')loadScreen();
+  if(view==='records')refreshRecords().catch(e=>{$('record-status').textContent=e.message;});
 }
 function updateWorkspace(){
   $('nav-pid-count').textContent=String(state.scan?.pid?.loops?.length||0);
   $('nav-device-count').textContent=String(state.scan?.device_report?.devices?.length??state.scan?.inventory?.endpoints?.length??0);
-  $('nav-panel').hidden=false;if(!workspaceNavigated)workspaceView='demo';showWorkspace(workspaceView);
+  $('nav-panel').hidden=state.scan?.platform!=='esp32';
+  showWorkspace(workspaceNavigated?workspaceView:'devices');
 }
 for(const key of Object.keys(workspaceViews))$('nav-'+key).onclick=event=>{event.preventDefault();workspaceNavigated=true;showWorkspace(key);};
+$('guide-open').onclick=()=>$('guide-dialog').showModal();
+$('guide-close').onclick=()=>$('guide-dialog').close();
+$('guide-api').onclick=()=>{
+  $('guide-dialog').close();
+  $('api-open').onclick();
+};
+$('guide-start').onclick=()=>{
+  $('guide-dialog').close();
+  workspaceNavigated=true;
+  showWorkspace('devices');
+  $('pick-project').onclick();
+};
 
 let localRecords=[],recordSelection='',recordFields='',recordActive=false,recordRefreshing=false;
 const numberText=value=>typeof value==='number'&&Number.isFinite(value)?Number(value.toFixed(4)).toLocaleString():'—';
@@ -356,7 +792,7 @@ async function refreshRecords(){
     recordActive=!!result.active;state.active_record=result.active;
     $('record-active').textContent=result.active?'● 正在本机记录 · '+result.active.samples+' 样本':'未在记录';
     $('record-folder').textContent='本机存储目录：'+result.folder;
-    $('record-start').disabled=!state.connected||state.serial_mode!=='raw'||recordActive;$('record-stop').disabled=!recordActive;$('record-demo').disabled=recordActive;
+    $('record-start').disabled=!state.connected||state.serial_mode!=='raw'||recordActive;$('record-stop').disabled=!recordActive;
     selectRecord();
   }finally{recordRefreshing=false;}
 }
@@ -385,7 +821,6 @@ function renderRecordReport(r){
 $('record-list').onchange=selectRecord;$('record-channel').onchange=configureRecordChannel;
 $('record-kind').onchange=()=>{const kind=$('record-kind').value,meta=selectedRecord();$('record-jump').value=0;$('record-period').value=kind==='angle'?360:kind==='angle_rad'?2*Math.PI:kind==='encoder'&&meta?.source==='simulation'?meta.info.encoder_period:0;$('record-cpr').value=kind==='encoder'&&meta?.source==='simulation'?meta.info.counts_per_turn:0;};
 action('record-refresh',refreshRecords);
-action('record-demo',async()=>{$('record-status').textContent='正在生成明确标注的模拟记录…';const result=await api('record-demo',{});await refreshRecords();$('record-list').value=result.id;selectRecord();$('record-status').textContent='已生成 400 个模拟样本，含角度阶跃、编码器回绕、刻意突变和时间间隔异常。请选择通道并分析。';});
 action('record-start',async()=>{const result=await api('record-start',{});await refreshRecords();$('record-list').value=result.id;selectRecord();$('record-status').textContent='正在本机留存原始收发与逐行数值。停止后记录仍保留；不向开发板发送指令。';});
 action('record-stop',async()=>{await api('record-stop',{});await refreshRecords();$('record-status').textContent='记录已停止并保存在本机。可以分析或导出。';});
 action('record-analyze',async()=>{$('record-status').textContent='正在本机分析…';const type=$('record-kind').value;const r=await api('record-analyze',{id:$('record-list').value,channel:$('record-channel').value,kind:type==='angle_rad'?'angle':type,period:Number($('record-period').value),cpr:Number($('record-cpr').value),reference:$('record-reference').value,jump_limit:Number($('record-jump').value),unit:type==='angle'?'deg':type==='angle_rad'?'rad':type==='encoder'?'count':'unknown'});renderRecordReport(r);});
@@ -395,7 +830,7 @@ setInterval(()=>{if(workspaceView==='records'&&recordActive)refreshRecords().cat
 
 function syncRecordButtons(){
   $('record-start').disabled=!state.connected||state.serial_mode!=='raw'||recordActive;
-  $('record-stop').disabled=!recordActive;$('record-demo').disabled=recordActive;
+  $('record-stop').disabled=!recordActive;
   $('record-analyze').disabled=!selectedRecord()||!$('record-channel').value;
   $('record-export').disabled=!selectedRecord();
 }

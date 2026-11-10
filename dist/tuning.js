@@ -20,7 +20,7 @@ function refreshTuning(){
     $('tuning-confirmed').checked=false;$('tuning-feedback').checked=false;
     $('tuning-status').textContent=meta?.source==='simulation'?'[模拟数据] 已带入模拟参数标签。需要数值试调方案时，请展开第 2 步核对并确认条件。':'实采记录请绑定信号，并填写对应的运行参数。未确认条件时仅分析现象。';
   }
-  $('tuning-diagnose').disabled=!meta||meta.state==='recording';$('tuning-demo').disabled=recordActive;
+  $('tuning-diagnose').disabled=!meta||meta.state==='recording';
   $('tuning-draft').disabled=tuningStale||!tuningReport?.proposal||!tuningReport?.source_snapshot?.loop_id;
 }
 const selectRecordWithoutTuning=selectRecord;
@@ -32,11 +32,6 @@ function tuningConfig(){
   return {mapping,loop_id:$('tuning-loop').value,unit:$('tuning-unit').value,tolerance:tuningNumber('tuning-tolerance'),pid:{kp:tuningNumber('tuning-kp'),ki:tuningNumber('tuning-ki'),kd:tuningNumber('tuning-kd')},sample_dt:tuningNumber('tuning-dt'),lower:tuningNumber('tuning-lower'),upper:tuningNumber('tuning-upper'),parameters_confirmed:$('tuning-confirmed').checked,feedback_verified:$('tuning-feedback').checked};
 }
 function tuningAction(id,fn){$(id).onclick=async()=>{const button=$(id);button.disabled=true;$('tuning-status').textContent='正在本机处理…';try{await fn();}catch(error){$('tuning-status').textContent=error.message;notice(error.message,true);}finally{button.disabled=false;$('tuning-draft').disabled=tuningStale||!tuningReport?.proposal||!tuningReport?.source_snapshot?.loop_id;}};}
-tuningAction('tuning-demo',async()=>{
-  const result=await api('tuning-demo',{});await refreshRecords();const before=result.records.find(r=>r.info.tuning_scenario==='oscillating'),after=result.records.find(r=>r.info.tuning_scenario==='damped');
-  $('record-list').value=before.id;selectRecord();$('tuning-before').value=before.id;$('tuning-after').value=after.id;
-  $('tuning-status').textContent='已保存 4 组模拟记录，各 600 样本：持续震荡、改善曲线、微分噪声、饱和积分。当前选中持续震荡，可直接诊断。';
-});
 function renderTuningReport(report){
   tuningReport=report;tuningStale=false;const m=report.metrics;stopTuningReplay();
   $('tuning-metrics').textContent='';for(const [label,value] of [['后段 RMS 误差',m.tail_rms_error],['震荡频率 Hz',m.frequency_hz],['输出饱和占比',m.saturation_fraction==null?'未绑定':(100*m.saturation_fraction).toFixed(1)+'%'],['回稳时间 s',m.settling_seconds??'窗口内未回稳']]){const card=element('div',undefined,'record-metric');card.append(element('span',label),element('strong',typeof value==='string'?value:numberText(value)));$('tuning-metrics').append(card);}

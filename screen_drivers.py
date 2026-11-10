@@ -41,10 +41,12 @@ def transport(defs, entry):
 
 def detect(sources, constants):
     defs = functions(sources); profiles = {}
-    oled = one(defs, 'OLED_ShowChar')
-    if oled and re.search(r'OLED_SetCursor\s*\(\s*\(\s*Line\s*-\s*1\s*\)\s*\*\s*2\s*,\s*\(\s*Column\s*-\s*1\s*\)\s*\*\s*8', oled['body']):
+    oled = defs.get('OLED_ShowChar', [])
+    cursor = r'OLED_SetCursor\s*\(\s*\(\s*Line\s*-\s*1\s*\)\s*\*\s*2\s*,\s*\(\s*Column\s*-\s*1\s*\)\s*\*\s*8\s*\)'
+    if oled and all(re.search(cursor, f['body']) for f in oled):
         profiles['oled'] = dict(id='oled', width=128, height=64, rows=4, columns=16, font_width=8, font_height=16,
-            title='行列式 OLED · 128×64 字符近似预览', transport=transport(defs, 'OLED_ShowChar'), evidence=[dict(path=oled['path'], line=oled['line'])])
+            title='行列式 OLED · 128×64 字符近似预览', transport=transport(defs, 'OLED_ShowChar'),
+            evidence=[dict(path=f['path'], line=f['line']) for f in oled])
     string, char, draw, clear = (one(defs, n) for n in ('LCD_DisplayStringLine', 'LCD_DisplayChar', 'LCD_DrawChar', 'LCD_Clear'))
     if all((string, char, draw, clear)):
         body = string['body']

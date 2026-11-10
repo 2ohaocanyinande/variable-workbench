@@ -11,7 +11,7 @@ import screen_conditions
 APIS={'OLED_ShowString':'text','OLED_ShowChar':'char','OLED_ShowNum':'number','OLED_ShowSignedNum':'signed','OLED_ShowHexNum':'hex','OLED_ShowBinNum':'binary','OLED_Clear':'clear'}
 LCD_APIS={'LCD_DisplayStringLine':'text','LCD_DisplayChar':'char','LCD_Clear':'clear','LCD_ClearLine':'clear_line','LCD_SetTextColor':'foreground','LCD_SetBackColor':'background','LCD_ShowString':'text','LCD_ShowChar':'char'}
 ALL_APIS={**APIS,**LCD_APIS}
-LOW_LEVEL=re.compile(r'^(?:LCD|OLED)_(?:Write|Read|SetCursor|Ctrl|Bus|Power|DisplayOn|DisplayOff|SetDisplayWindow|WindowMode|Init|DrawChar|DrawPoint|SetPoint)')
+LOW_LEVEL=re.compile(r'^(?:LCD|OLED)_(?:Write|Read|SetCursor|Ctrl|Bus|Power|DisplayOn|DisplayOff|SetDisplayWindow|WindowMode|Init|DrawChar|DrawPoint|SetPoint|I2C|W_SCL|W_SDA)')
 
 def buffer_name(expr):
     return re.sub(r'^\(\s*(?:const\s+)?(?:u8|char|uint8_t)\s*\*\s*\)\s*','',expr).strip()
@@ -105,7 +105,10 @@ def extract(scan):
             end=balanced(code,fn.end()-1,'{','}')
             if end is None or fn[1] in {'if','for','while','switch'} or fn[1] in ALL_APIS or LOW_LEVEL.match(fn[1]):continue
             calls=[]
-            conditions,branches=screen_conditions.regions(code,fn.end(),end)
+            conditions,branches=screen_conditions.regions(code,fn.end(),end,constants)
+            def guards_at(position):
+                return [{k:v for k,v in c.items() if k not in ('start','end')}
+                        for c in conditions if c['start']<position<c['end']]
             for call in re.finditer(r'\b('+ '|'.join(ALL_APIS)+r')\s*\(',code[fn.end():end]):
                 pos=fn.end()+call.start();opening=fn.end()+call.end()-1;closing=balanced(code,opening)
                 if closing is None:continue
@@ -122,8 +125,8 @@ def extract(scan):
                         if cl is None:continue
                         fa=arguments(raw,code,op+1,cl);fi=2 if fmt[1]=='snprintf' else 1
                         if len(fa)>fi and fa[0]==buffer and literal(fa[fi]) is not None and not re.search(r'\b'+re.escape(buffer)+r'\b',code[cl+1:pos]):
-                            pg=[(c['name'],c['op'],c['value']) for c in conditions if c['start']<op<c['end']];cg=[(c['name'],c['op'],c['value']) for c in conditions if c['start']<pos<c['end']]
-                            if pg==cg:producer={'format':literal(fa[fi]),'expressions':fa[fi+1:],'source':raw[fn.end()+fmt.start():cl+1]}
+                            if guards_at(op)==guards_at(pos) and not any(a<op<b and not a<pos<b for a,b in branches):
+                                producer={'format':literal(fa[fi]),'expressions':fa[fi+1:],'source':raw[fn.end()+fmt.start():cl+1]}
                 variables=sorted(expression_symbols(expr)) if text is None else []
                 variables=[v for v in variables if v not in {'float','double','int','uint8_t','uint16_t','uint32_t','int16_t','int32_t'}]
                 if producer:variables=sorted(expression_symbols(' '.join(producer['expressions'])))
@@ -134,9 +137,9 @@ def extract(scan):
                 calls.append({'id':f'{name}:{line}:{pos}','api':call[1],'kind':kind,'arguments':args,'expression':expr,'text':text,'variables':variables,
                               'path':name,'line':line,'sha256':scan['files'][name],'source':raw[pos:closing+1],'producer':producer,
                               'profile':profile,'blocked_condition':any(a<pos<b for a,b in branches),
-                              'guards':[{k:c[k] for k in ('name','op','value')} for c in conditions if c['start']<pos<c['end']]})
+                              'guards':guards_at(pos)})
             if not calls:continue
-            buttons=[];guard_names={g['name'] for c in calls for g in c['guards']}
+            buttons=[];guard_names={g['name'] for c in calls for guard in c['guards'] for g in screen_conditions.leaves(guard)}
             for cond in conditions:
                 if cond.get('op')!='==':continue
                 for assign in re.finditer(r'\b(\w+)\s*=\s*(\d+)\s*;',code[cond['start']+1:cond['end']]):
@@ -144,22 +147,29 @@ def extract(scan):
             identifier=hashlib.sha256((name+'::'+fn[1]+'::'+str(fn.start())).encode()).hexdigest()[:18]
             # Keep independent displays apart even if one function draws both.
             drawing_profiles={c['profile'] for c in calls if c['kind'] not in ('foreground','background','clear','clear_line')}
-            for pid in drawing_profiles or {c['profile'] for c in calls}:
+            for pid in sorted(drawing_profiles):
                 subset=[c for c in calls if c['profile']==pid or (pid=='lcd_xy' and c['api'] in ('LCD_Clear','LCD_SetTextColor','LCD_SetBackColor'))]
-                names=sorted({v for c in subset for v in c['variables']}|{g['name'] for c in subset for g in c['guards']}|{b['input'] for b in buttons})
+                terms=[g for c in subset for guard in c['guards'] for g in screen_conditions.leaves(guard)]
+                names=sorted({v for c in subset for v in c['variables']}|{g['name'] for g in terms}|{b['input'] for b in buttons})
+                defaults={n:initial[n] for n in names if n in initial}
+                for term in terms:
+                    if 'refresh_seed' in term:
+                        key=term['name'];value=term['refresh_seed']
+                        if key not in defaults or defaults[key]['value']<value:
+                            defaults[key]=dict(value=value,path=name,line=raw.count('\n',0,fn.start(1))+1,origin='refresh')
                 groups.append({'id':identifier+'-'+pid,'name':fn[1],'path':name,'line':raw.count('\n',0,fn.start(1))+1,'calls':subset,'buttons':buttons,
-                               'grid_verified':pid in profiles,'profile':profiles.get(pid),'constants':constants,'defaults':{n:initial[n] for n in names if n in initial},'variables':names})
+                               'grid_verified':pid in profiles,'profile':profiles.get(pid),'constants':constants,'defaults':defaults,'variables':names})
     for name,raw in sources.items():
         if name.endswith(('.c','.cpp')):
             for m in re.finditer(r'\b((?:LCD|OLED|lv_label|u8g2)\w*)\s*\(',masked(raw)):
                 owner=next((f for fs in defs.values() for f in fs if f['path']==name and f['opening']<m.start()<f['end']),None)
-                if not owner or owner['name'] in ALL_APIS or LOW_LEVEL.match(owner['name']):continue
+                if not owner or owner['name'] in ALL_APIS or LOW_LEVEL.match(owner['name']) or owner['name'].startswith('LCD_Draw'):continue
                 if m[1] not in ALL_APIS and not LOW_LEVEL.match(m[1]):unsupported.append({'path':name,'line':raw.count('\n',0,m.start())+1,'api':m[1]})
-    groups.sort(key=lambda g:(not any(c['kind'] in ('text','char','number','signed','hex','binary') for c in g['calls']),g['name']!='main',g['path'],g['line'],g['id']))
+    groups.sort(key=lambda g:(g['name']!='main',g['path'],g['line'],g['id']))
     # Recognize only a direct boolean toggle under a simple key condition. More
     # involved key state machines stay in the source table instead of being invented.
     for group in groups:
-        guard_names={g['name'] for c in group['calls'] for g in c['guards']}
+        guard_names={g['name'] for c in group['calls'] for guard in c['guards'] for g in screen_conditions.leaves(guard)}
         for fs in defs.values():
             for fn in fs:
                 raw=sources[fn['path']];code=masked(raw)
@@ -168,7 +178,7 @@ def extract(scan):
                     pos=fn['opening']+1+m.start()
                     group['buttons'].append(dict(input=m[1],variable=m[2],operation='toggle',path=fn['path'],line=raw.count('\n',0,pos)+1))
     return {'project_hash':scan['project_hash'],'root':scan['root'],'groups':groups[:100],'unsupported':unsupported[:60],
-            'notice':'源码静态近似预览，不运行固件。变量可使用标注的源码初值或手动赋值，不是实时测量；支持带/不带花括号的 if/else if/else（变量与整数相等/不等），其他条件与循环跳过。按函数内源码顺序组合所选调用；未执行跨函数调度，字形与硬件字体可能不同。'}
+            'notice':'源码静态近似预览。支持数值或宏比较、且/或组合，以及明确标注的 HAL 定时刷新假定值。按函数内源码顺序组合所选调用，复杂控制流与真实硬件状态仍需核对。'}
 
 def evaluate(expr,values):
     if len(expr)>200:return None
@@ -236,8 +246,8 @@ def render(report,data):
     initial_bg=bg;missing_conditions=set();blocked_calls=[]
     for call in group['calls']:
         if call['id'] not in selected:continue
-        if any(g['name'] in values and (values[g['name']]==g['value']) != (g.get('op','==')=='==') for g in call['guards']):continue
-        missing={g['name'] for g in call['guards'] if g['name'] not in values}
+        condition, missing = screen_conditions.check({'all':call['guards']}, values)
+        if condition is False:continue
         if missing:missing_conditions.update(missing);continue
         if call.get('blocked_condition'):blocked_calls.append(call['id']);continue
         args=call['arguments'];kind=call['kind'];pid=profile['id']

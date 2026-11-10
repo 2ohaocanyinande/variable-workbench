@@ -15,15 +15,17 @@ import urllib.request
 import urllib.parse
 import urllib.error
 import ssl
+import tempfile
 import api_store
 from code_evidence import quote_source_line
 from serial_console import SerialConsole
 import pid_loops
 import telemetry
 import tuning_advisor
-import panel_templates
 import context_questions
 import source_screen
+import device_review
+import freertos_index
 
 import serial
 from serial.tools import list_ports
@@ -35,6 +37,7 @@ from device_inventory import inventory, packet as device_packet, validate as val
 BASE = Path(sys.executable).resolve().parent if getattr(sys, "frozen", False) else Path(__file__).resolve().parent
 ASSETS = Path(getattr(sys, "_MEIPASS", BASE))
 STATE = BASE / "state"
+PID_WRITE_ROOT = Path(r'D:\codex')
 STATE.mkdir(exist_ok=True)
 LOCK = threading.RLock()
 PROJECT = BASE / "sample_esp32"
@@ -51,6 +54,7 @@ LOG = deque(maxlen=80)
 API = {}
 API_STORE_ERROR = ''
 WINDOW_ACTIVITY = time.monotonic()
+WINDOW_CLOSED_AT = None
 ANALYSIS_JOB = {"phase": "idle", "error": "", "started": None}
 
 
@@ -112,6 +116,8 @@ def restore_device_report(scan):
         report=saved.get('device_report');known={e['id'] for e in scan['inventory']['endpoints']}
         if not isinstance(report,dict) or not isinstance(report.get('devices'),list):return
         if not all(isinstance(d,dict) and isinstance(d.get('endpoint_ids'),list) and set(d['endpoint_ids'])<=known for d in report['devices']):return
+        for device in report['devices']:
+            device['numeric_review_required']=device_review.requires_numeric_review(device)
         report['restored_from_cache']=True;scan['device_report']=report
     except (OSError,ValueError,KeyError,TypeError):return
 
@@ -234,6 +240,7 @@ def scan_project(root):
     usage = index_usage(root, usage_texts, active, hashes)
     device_index = inventory(root, usage_texts, hashes)
     pid_index = pid_loops.index(root, usage_texts, hashes)
+    rtos_index = freertos_index.index(root, usage_texts, hashes, layout['platform'])
     project_hash = digest(json.dumps(hashes, sort_keys=True).encode())
     draft_path = STATE / ('pid-'+project_hash[:20]+'.json')
     if draft_path.is_file():
@@ -245,7 +252,7 @@ def scan_project(root):
     return {"root": str(root), "files": hashes, "file_count": len(hashes), "build_source": build_source, "usage": usage,
             "platform": layout['platform'], "project_info": layout,
             "inventory": device_index,
-            "pid": pid_index,
+            "pid": pid_index, "rtos": rtos_index,
             "project_hash": digest(json.dumps(hashes, sort_keys=True).encode()), "fields": fields,
             "api_calls": 0, "scope": "用途分析：本地提取声明、调用链和源码片段，AI 判断用途。控制接入仍限已适配接口；用途推测不会自动获得写权限。"}
 
@@ -547,6 +554,7 @@ def _analyze_usage(data):
         original_snippets = {'s_'+digest(sid.encode())[:12]: snippet
                              for sid, snippet in scan['inventory']['snippets'].items()}
         for device in devices:
+            device['numeric_review_required']=device_review.requires_numeric_review(device)
             for proof in device['evidence']:
                 original = original_snippets.get(proof['id'])
                 line = quote_source_line(proof['quote'], original['code']) if original else None
@@ -606,9 +614,11 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def do_GET(self):
-        global WINDOW_ACTIVITY
+        global WINDOW_ACTIVITY, WINDOW_CLOSED_AT
         if self.path in {"/api/health", "/api/heartbeat"}:
-            if self.path == "/api/heartbeat": WINDOW_ACTIVITY = time.monotonic()
+            if self.path == "/api/heartbeat":
+                WINDOW_ACTIVITY = time.monotonic()
+                WINDOW_CLOSED_AT = None
             self.send_json({"application": "variable-workbench"})
             return
         if self.path == "/api/analysis-status":
@@ -642,11 +652,6 @@ class Handler(BaseHTTPRequestHandler):
                     for record in records:
                         if record['state']=='recording' and (not store.active or record['id']!=store.active['id']):record['state']='interrupted'
                     self.send_json({'records':records,'active':dict(store.active) if store.active else None,'folder':str(store.base)})
-                elif self.path == '/api/template-panel':
-                    if not SCAN or SCAN.get('platform')!='stm32':raise ValueError('请先选择并扫描 STM32 工程')
-                    self.send_json({'project_hash':SCAN['project_hash'],'root':SCAN['root'],'candidates':panel_templates.candidates(SCAN),
-                                    'templates':[{'id':k,'label':v['label']} for k,v in panel_templates.TEMPLATES.items()],
-                                    'panel':panel_templates.load(STATE,SCAN)})
                 elif self.path == '/api/question-targets':
                     if not SCAN:raise ValueError('请先打开工程')
                     self.send_json({'project_hash':SCAN['project_hash'],'targets':[{'id':t['id'],'name':t['name']} for t in context_questions.targets(SCAN,STATE)]})
@@ -654,11 +659,6 @@ class Handler(BaseHTTPRequestHandler):
                     if not SCAN:raise ValueError('请先打开工程')
                     SCAN['screen_index']=source_screen.extract(SCAN)
                     self.send_json(SCAN['screen_index'])
-                elif self.path.startswith('/api/template-panel-data?'):
-                    if not SCAN or SCAN.get('platform')!='stm32':raise ValueError('请先打开 STM32 工程')
-                    query=urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query);panel=panel_templates.load(STATE,SCAN)
-                    if not panel or query.get('panel_id',[''])[0]!=panel['id'] or query.get('project_hash',[''])[0]!=panel['project_hash']:raise ValueError('工程或面板已变化，请刷新面板')
-                    self.send_json(panel_templates.sample(panel,float(query.get('t',['0'])[0])))
                 elif self.path.startswith('/api/serial-data?'):
                     query = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
                     self.send_json(serial_data(max(0, int(query.get('after',['0'])[0]))))
@@ -685,7 +685,7 @@ class Handler(BaseHTTPRequestHandler):
         except Exception as error: self.send_json({"error": str(error)}, 400)
 
     def do_POST(self):
-        global PROJECT, SCAN, MANIFEST, PORT, API
+        global PROJECT, SCAN, MANIFEST, PORT, API, WINDOW_CLOSED_AT
         # Browser-originated modifications must originate from this local UI.
         origin = self.headers.get("Origin")
         if origin and origin not in {f"http://127.0.0.1:{self.server.server_port}", f"http://localhost:{self.server.server_port}"}:
@@ -703,6 +703,16 @@ class Handler(BaseHTTPRequestHandler):
             if self.path in {'/api/question-preview','/api/question-ask'}:
                 self.send_json(answer_context_question(data,self.path.endswith('preview')))
                 return
+            if self.path == '/api/device-review':
+                with LOCK:
+                    owner = SCAN
+                    scan = dict(owner) if owner else None
+                result = device_review.review(scan, data)
+                with LOCK:
+                    if SCAN is not owner or SCAN.get('device_report') is not scan.get('device_report'):
+                        raise ValueError('工程或设备清单已更新，请重新选择设备')
+                self.send_json(result)
+                return
             if self.path == "/api/browse-project":
                 self.send_json(browse(data.get("path"), BASE / "sample_esp32"))
                 return
@@ -711,7 +721,8 @@ class Handler(BaseHTTPRequestHandler):
                     forget_api()
                     self.send_json({'ok':True})
                 elif self.path == "/api/window-close":
-                    # Refreshes and a reopened shortcut can reuse this process.
+                    WINDOW_CLOSED_AT = time.monotonic()
+                    # A fresh heartbeat cancels the desktop shutdown grace period.
                     # Remembered settings stay usable; session-only keys are cleared.
                     if not (STATE / 'model-settings.dpapi').is_file(): API.clear()
                     close_port()
@@ -740,26 +751,18 @@ class Handler(BaseHTTPRequestHandler):
                 elif self.path == '/api/serial-clear':
                     CONSOLE.reset(); self.send_json({'ok':True})
                 elif self.path == '/api/pid-config': self.send_json(save_pid_config(data))
+                elif self.path == '/api/pid-apply': self.send_json(apply_pid_config(data))
                 elif self.path == '/api/source-screen-render':
                     if not SCAN or data.get('project_hash')!=SCAN['project_hash']:raise ValueError('工程已变化，请重新读取')
                     self.send_json(source_screen.render(source_screen.extract(SCAN),data))
-                elif self.path in {'/api/template-panel','/api/template-panel-set'}:
-                    if not SCAN or SCAN.get('platform')!='stm32':raise ValueError('请先打开 STM32 工程')
-                    self.send_json(panel_templates.build(STATE,SCAN,data) if self.path=='/api/template-panel' else panel_templates.set_value(STATE,SCAN,data))
                 elif self.path == '/api/record-start': self.send_json(start_record(data.get('config')))
                 elif self.path == '/api/record-stop': self.send_json({'record':record_store().stop()})
-                elif self.path == '/api/record-demo':
-                    if record_store().active: raise ValueError('请先停止当前记录')
-                    self.send_json(telemetry.demo(record_store().base))
                 elif self.path == '/api/record-analyze':
                     report=telemetry.analyze(record_store().base,data.get('id'),data.get('channel'),data.get('kind','generic'),data.get('period',0),data.get('cpr',0),data.get('reference',''),data.get('jump_limit',0))
                     report['analyzed_at']=time.time();report['unit']=str(data.get('unit','unknown'))[:20]
                     report_path=telemetry.record_path(record_store().base,data.get('id'))/('analysis-'+digest(data['channel'].encode())[:12]+'.json')
                     report['report_path']=str(report_path);atomic_json(report_path,report);self.send_json(report)
                 elif self.path == '/api/record-export': self.send_json({'path':telemetry.export_csv(record_store().base,data.get('id'))})
-                elif self.path == '/api/tuning-demo':
-                    if record_store().active:raise ValueError('请先停止当前记录')
-                    self.send_json(tuning_advisor.demos(record_store().base))
                 elif self.path == '/api/tuning-diagnose':
                     snapshot=tuning_snapshot(data.get('config',{}))
                     self.send_json(tuning_advisor.diagnose(record_store().base,data.get('id'),data.get('config',{}),snapshot))
@@ -828,7 +831,7 @@ def tuning_to_draft(data):
     return result
 
 
-def save_pid_config(data):
+def prepare_pid_config(data):
     import difflib
     if not SCAN: raise ValueError('请先打开工程')
     if data.get('project_hash') != SCAN['project_hash']: raise ValueError('工程已切换或变化，请重新打开控制环')
@@ -861,29 +864,91 @@ def save_pid_config(data):
             edits.setdefault(source['path'],[]).append((source,value))
         validated.append({'id':cfg['id'],'name':name,'category':category,'gains':normalized})
     patches=[]
+    updates={}
     for name,changes in edits.items():
         path=(Path(SCAN['root'])/name).resolve()
-        if not path.is_relative_to(Path(SCAN['root']).resolve()) or digest(path.read_bytes())!=SCAN['files'].get(name):
+        if not path.is_relative_to(Path(SCAN['root']).resolve()):
+            raise ValueError('参数来源位于工程目录之外')
+        raw=path.read_bytes()
+        if digest(raw)!=SCAN['files'].get(name):
             raise ValueError('源码已变化，请重新扫描后配置')
-        original=path.read_text(encoding='utf-8-sig');updated=original
+        text=raw.decode('utf-8-sig')
+        original=re.sub(r'\r\n?', '\n', text)
+        updated=original
         occupied=set()
         for source,value in sorted(changes,key=lambda pair:pair[0]['offset'],reverse=True):
             if source['offset'] in occupied: raise ValueError('多个设置引用同一赋值，请先核对')
             occupied.add(source['offset'])
             if original[source['offset']:source['end']]!=source['literal']: raise ValueError('参数位置已变化，请重新扫描')
+            if value==source['value']: continue
             literal=format(value,'.9g')
             if source['literal'].lower().endswith('f'):
                 if not any(c in literal.lower() for c in '.e'): literal+='.0'
                 literal+='f'
             updated=updated[:source['offset']]+literal+updated[source['end']:]
-        patches.extend(difflib.unified_diff(original.splitlines(keepends=True),updated.splitlines(keepends=True),fromfile='a/'+name,tofile='b/'+name))
+        if updated!=original:
+            endings=iter(re.findall(r'\r\n|\r|\n',text))
+            encoded=re.sub('\n', lambda _:next(endings), updated).encode('utf-8')
+            bom=b'\xef\xbb\xbf' if raw.startswith(b'\xef\xbb\xbf') else b''
+            updates[path]=(raw,bom+encoded)
+            patches.extend(difflib.unified_diff(original.splitlines(keepends=True),updated.splitlines(keepends=True),fromfile='a/'+name,tofile='b/'+name))
     draft={'project_hash':SCAN['project_hash'],'root':SCAN['root'],'loops':validated,'unbound':unbound}
-    stem='pid-'+SCAN['project_hash'][:20]
+    return draft,''.join(patches),updates
+
+
+def pid_preview_id(draft, patch_text):
+    return digest(json.dumps([draft,patch_text],ensure_ascii=False,sort_keys=True).encode())
+
+
+def pid_write_block(updates):
+    if not updates: return '没有绑定到源码且需要写入的参数。'
+    if len(updates)!=1: return '直接写回每次支持一个源码文件。请分次修改，或使用补丁。'
+    root=PID_WRITE_ROOT.resolve()
+    if not Path(SCAN['root']).resolve().is_relative_to(root) or not all(p.is_relative_to(root) for p in updates):
+        return '此工程仅可导出补丁。直接写回限 D 盘 codex 工作区内的工程。'
+    return ''
+
+
+def save_pid_config(data):
+    draft,patch_text,updates=prepare_pid_config(data)
+    stem='pid-'+draft['project_hash'][:20]
     atomic_json(STATE/(stem+'.json'),draft)
-    patch_text=''.join(patches)
     (STATE/(stem+'.patch')).write_text(patch_text,encoding='utf-8')
     return {'ok':True,'draft':draft,'patch':patch_text,'patch_path':str(STATE/(stem+'.patch')),
+            'preview_id':pid_preview_id(draft,patch_text),'write_block':pid_write_block(updates),
             'notice':'已保存本机调参方案和补丁；原工程、开发板均未修改。未绑定参数仅保存在方案中。'}
+
+
+def apply_pid_config(data):
+    global SCAN, MANIFEST
+    if PORT is not None:
+        raise ValueError('请先断开开发板串口，再写回源码')
+    draft,patch_text,updates=prepare_pid_config(data)
+    if data.get('preview_id')!=pid_preview_id(draft,patch_text):
+        raise ValueError('补丁预览已过期，请重新预览')
+    if blocked:=pid_write_block(updates):
+        raise ValueError(blocked)
+    if scan_project(Path(draft['root']))['project_hash']!=draft['project_hash']:
+        raise ValueError('工程文件已变化，请重新扫描并核对补丁')
+    path,(original,updated)=next(iter(updates.items()))
+    temporary=None
+    try:
+        with tempfile.NamedTemporaryFile(dir=path.parent, prefix='.pid-', delete=False) as output:
+            temporary=Path(output.name)
+            output.write(updated)
+        os.chmod(temporary,path.stat().st_mode)
+        if path.read_bytes()!=original:
+            raise ValueError('源码已变化，请重新扫描并核对补丁')
+        os.replace(temporary,path)
+    finally:
+        if temporary is not None: temporary.unlink(missing_ok=True)
+    MANIFEST=None
+    try:
+        SCAN=scan_project(Path(draft['root']))
+    except (OSError,ValueError):
+        SCAN=None
+        return {'refreshed':False,'notice':'源码已写入，但自动扫描失败。请手动扫描工程。'}
+    return {'refreshed':True,'notice':'源码已写入，参数位置已自动更新。'}
 
 
 PID_CATEGORIES={'待确认','速度环','位置环','角度环','角速度环','转向环','电流环','其他控制环'}

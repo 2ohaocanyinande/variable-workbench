@@ -72,6 +72,11 @@ def resolve_project_root(root):
 
 def is_vendor_source(relative):
     path = Path(relative)
+    parts = [part.casefold() for part in path.parts]
+    if path.name.casefold() == 'freertosconfig.h' or any(
+        left == 'freertos' and right in {'app','target'} for left,right in zip(parts,parts[1:])
+    ):
+        return False
     if re.fullmatch(r'core_cm(?:\d+\w*|Instr|Func)\.[ch]',path.name,re.I):return True
     if re.fullmatch(r'stm32[a-z]\d+xx\.h',path.name,re.I):return True
     if path.parent.name.casefold() == 'core' and re.match(r'vl53l[01]\w*\.[ch]$',path.name,re.I): return True

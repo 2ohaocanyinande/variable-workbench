@@ -95,6 +95,33 @@ void collect(void) { feedback_value=produce(); }
         gain=next(l for l in index['loops'] if l['symbol']=='first')['gains']['kp']
         self.assertEqual(len(gain['sources']),2);self.assertIsNone(gain['value'])
 
+    def test_apply_refreshes_offsets_and_rejects_a_stale_preview(self):
+        original=b'\xef\xbb\xbf'+SOURCE.replace('\n','\r\n').encode('utf-8')
+        self.source.write_bytes(original)
+        w.SCAN=w.scan_project(self.root)
+        with patch.object(w,'PID_WRITE_ROOT',self.root),patch.object(w,'MANIFEST',None):
+            def preview(value):
+                config=self.config(value)
+                result=w.save_pid_config(config)
+                self.assertEqual(result['write_block'],'')
+                return dict(config,preview_id=result['preview_id'])
+
+            first=preview(12.25)
+            self.assertTrue(w.apply_pid_config(first)['refreshed'])
+            self.assertEqual(self.source.read_bytes(),original.replace(b'first.Kp=1.0f',b'first.Kp=12.25f'))
+            with self.assertRaises(ValueError):
+                w.apply_pid_config(first)
+            second=preview(3)
+            self.assertTrue(w.apply_pid_config(second)['refreshed'])
+            self.assertEqual(self.source.read_bytes(),original.replace(b'first.Kp=1.0f',b'first.Kp=3.0f'))
+
+            stale=preview(4)
+            external=self.source.read_bytes()+b'// external edit\r\n'
+            self.source.write_bytes(external)
+            with self.assertRaisesRegex(ValueError,'重新扫描'):
+                w.apply_pid_config(stale)
+            self.assertEqual(self.source.read_bytes(),external)
+
     def test_ai_cannot_add_unknown_loop_or_invent_quote(self):
         lid=w.SCAN['pid']['loops'][0]['id']
         answer={'choices':[{'finish_reason':'stop','message':{'content':json.dumps({'loops':[

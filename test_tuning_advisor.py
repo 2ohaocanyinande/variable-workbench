@@ -122,12 +122,12 @@ class NineAxisTests(unittest.TestCase):
     def test_header_is_not_sampling(self):
         code='#define LSM6DSR_ID 1\n#define QMC5883L_ADDR 0x0d\nvoid IMU963RA_GetAccel(void);\nvoid IMU963RA_GetGyro(void);'
         hint=self.hint(code)[0];self.assertIn('九轴',hint['module_model'])
-        self.assertIn('仅发现寄存器定义',hint['components'][2]['state'])
+        self.assertIn('初检片段仅见寄存器定义',hint['components'][2]['state'])
         self.assertNotIn('实现',hint['components'][0]['state'])
 
     def test_read_entry_and_pwm_not_promoted(self):
         code='#define LSM6DSR_ID 1\n#define QMC5883L_ADDR 0x0d\nvoid IMU963RA_GetMag(void) { qmc5883l_read(); }'
-        self.assertIn('存在读取相关代码',self.hint(code)[0]['components'][2]['state'])
+        self.assertIn('初检片段有读取相关标识',self.hint(code)[0]['components'][2]['state'])
         self.assertEqual(self.hint(code,'PWM'),[])
 
 
